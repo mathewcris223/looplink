@@ -48,6 +48,8 @@ const TestimonialCard = ({ t, i }: { t: typeof testimonials[0]; i: number }) => 
     </div>
   );
 };
+
+const TestimonialsSection = () => {
   const headRef = useScrollReveal<HTMLDivElement>();
 
   return (
