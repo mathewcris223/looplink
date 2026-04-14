@@ -1,30 +1,68 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 glass border-b">
-      <div className="container mx-auto flex items-center justify-between h-16 px-4">
-        <a href="#" className="font-display text-xl font-bold text-gradient">LoopLink</a>
+    <nav
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        scrolled ? "glass shadow-sm border-b" : "bg-transparent border-transparent"
+      }`}
+    >
+      <div className="container mx-auto flex items-center justify-between h-16 px-6">
+        <a href="#" className="font-display text-xl font-bold text-gradient">
+          LoopLink
+        </a>
+
         <div className="hidden md:flex items-center gap-8">
-          <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
-          <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How It Works</a>
-          <a href="#faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">FAQ</a>
-          <Button variant="hero" size="sm">Get Started Free</Button>
+          {["Features", "How It Works", "FAQ"].map((item) => (
+            <a
+              key={item}
+              href={`#${item.toLowerCase().replace(/ /g, "-")}`}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 relative group"
+            >
+              {item}
+              <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-gradient-brand transition-all duration-300 group-hover:w-full" />
+            </a>
+          ))}
+          <Button variant="hero" size="sm" className="animate-pulse-glow rounded-full px-5">
+            Get Started Free
+          </Button>
         </div>
-        <button className="md:hidden" onClick={() => setOpen(!open)}>
-          {open ? <X size={24} /> : <Menu size={24} />}
+
+        <button
+          className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
+          onClick={() => setOpen(!open)}
+          aria-label="Toggle menu"
+        >
+          {open ? <X size={22} /> : <Menu size={22} />}
         </button>
       </div>
+
       {open && (
-        <div className="md:hidden glass border-t px-4 pb-4 flex flex-col gap-3 animate-fade-up">
-          <a href="#features" className="py-2 text-sm text-muted-foreground" onClick={() => setOpen(false)}>Features</a>
-          <a href="#how-it-works" className="py-2 text-sm text-muted-foreground" onClick={() => setOpen(false)}>How It Works</a>
-          <a href="#faq" className="py-2 text-sm text-muted-foreground" onClick={() => setOpen(false)}>FAQ</a>
-          <Button variant="hero" size="sm" className="w-full">Get Started Free</Button>
+        <div className="md:hidden glass border-t px-6 pb-5 pt-3 flex flex-col gap-1 animate-fade-up">
+          {["Features", "How It Works", "FAQ"].map((item) => (
+            <a
+              key={item}
+              href={`#${item.toLowerCase().replace(/ /g, "-")}`}
+              className="py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setOpen(false)}
+            >
+              {item}
+            </a>
+          ))}
+          <Button variant="hero" size="sm" className="w-full mt-2 rounded-full">
+            Get Started Free
+          </Button>
         </div>
       )}
     </nav>
