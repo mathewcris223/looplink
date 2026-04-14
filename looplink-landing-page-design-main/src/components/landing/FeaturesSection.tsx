@@ -1,4 +1,4 @@
-import { BarChart3, Brain, HeartPulse, Lightbulb, Smile, Store } from "lucide-react";
+import { BarChart3, Brain, HeartPulse, Lightbulb } from "lucide-react";
 import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 
 const features = [
@@ -17,13 +17,6 @@ const features = [
     iconColor: "text-amber-500",
   },
   {
-    icon: HeartPulse,
-    title: "Business Health Score",
-    desc: "See your business performance at a glance with a simple health score.",
-    color: "from-rose-500/20 to-rose-500/5",
-    iconColor: "text-rose-500",
-  },
-  {
     icon: Brain,
     title: "AI-Powered Suggestions",
     desc: "Know exactly what to do next to increase profit — powered by AI.",
@@ -31,28 +24,18 @@ const features = [
     iconColor: "text-violet-500",
   },
   {
-    icon: Smile,
-    title: "Simple & Stress-Free",
-    desc: "No accounting degree needed. Just clear results you can act on.",
-    color: "from-sky-500/20 to-sky-500/5",
-    iconColor: "text-sky-500",
-  },
-  {
-    icon: Store,
-    title: "Works for Any Business",
-    desc: "From market traders to growing teams — LoopLink adapts to you.",
-    color: "from-primary/20 to-primary/5",
-    iconColor: "text-primary",
+    icon: HeartPulse,
+    title: "Business Health Score",
+    desc: "See your business performance at a glance with a simple health score.",
+    color: "from-rose-500/20 to-rose-500/5",
+    iconColor: "text-rose-500",
   },
 ];
 
 const FeatureCard = ({ f, i }: { f: typeof features[0]; i: number }) => {
   const ref = useScrollReveal<HTMLDivElement>(i * 80);
   return (
-    <div
-      ref={ref}
-      className="section-reveal gradient-border group p-6 cursor-default card-hover"
-    >
+    <div ref={ref} className="section-reveal gradient-border group p-6 cursor-default card-hover">
       <div
         className={`mb-5 inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br ${f.color} transition-transform duration-300 group-hover:scale-110`}
       >
@@ -68,22 +51,22 @@ const FeaturesSection = () => {
   const headRef = useScrollReveal<HTMLDivElement>();
 
   return (
-    <section id="features" className="py-28 relative">
+    <section id="features" className="py-20 relative">
       <div className="container mx-auto px-6">
-        <div ref={headRef} className="section-reveal text-center mb-16 space-y-4">
+        <div ref={headRef} className="section-reveal text-center mb-12 space-y-3">
           <span className="inline-block text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full tracking-wide uppercase">
             Features
           </span>
-          <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold">
+          <h2 className="font-display text-3xl md:text-4xl font-bold">
             Everything you need to{" "}
             <span className="text-gradient">grow smarter</span>
           </h2>
-          <p className="text-muted-foreground max-w-md mx-auto text-lg">
+          <p className="text-muted-foreground max-w-sm mx-auto">
             Powerful tools designed to make business management effortless.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
           {features.map((f, i) => (
             <FeatureCard key={f.title} f={f} i={i} />
           ))}

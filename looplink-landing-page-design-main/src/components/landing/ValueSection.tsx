@@ -15,7 +15,7 @@ const ValueSection = () => {
   const rightRef = useScrollReveal<HTMLDivElement>(150);
 
   return (
-    <section className="py-28 relative overflow-hidden">
+    <section className="py-20 relative overflow-hidden">
       <div className="absolute top-1/2 -right-48 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] -translate-y-1/2" />
 
       <div className="container mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">

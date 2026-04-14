@@ -49,7 +49,7 @@ const HowItWorksSection = () => {
   const headRef = useScrollReveal<HTMLDivElement>();
 
   return (
-    <section id="how-it-works" className="py-28 relative overflow-hidden">
+    <section id="how-it-works" className="py-20 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-brand-subtle" />
       <div className="absolute top-0 right-0 w-96 h-96 bg-secondary/8 rounded-full blur-[100px]" />

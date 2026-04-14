@@ -6,7 +6,7 @@ const CTASection = () => {
   const ref = useScrollReveal<HTMLDivElement>();
 
   return (
-    <section className="py-28 relative overflow-hidden">
+    <section className="py-20 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/10" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] rounded-full bg-primary/8 blur-[120px]" />

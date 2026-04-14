@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Mail, Twitter, Instagram, Linkedin } from "lucide-react";
 
 const Footer = () => (
@@ -29,19 +30,15 @@ const Footer = () => (
           </div>
         </div>
 
-        {/* Links */}
+        {/* Product links */}
         <div className="space-y-4">
           <h4 className="text-sm font-semibold">Product</h4>
           <div className="flex flex-col gap-2.5 text-sm text-muted-foreground">
-            {["Features", "How It Works", "FAQ", "Privacy Policy"].map((link) => (
-              <a
-                key={link}
-                href={`#${link.toLowerCase().replace(/ /g, "-")}`}
-                className="hover:text-foreground transition-colors duration-200 w-fit"
-              >
-                {link}
-              </a>
-            ))}
+            <a href="#features" className="hover:text-foreground transition-colors w-fit">Features</a>
+            <a href="#how-it-works" className="hover:text-foreground transition-colors w-fit">How It Works</a>
+            <a href="#" className="hover:text-foreground transition-colors w-fit">About</a>
+            <a href="#" className="hover:text-foreground transition-colors w-fit">Privacy Policy</a>
+            <Link to="/faq" className="hover:text-foreground transition-colors w-fit">FAQ</Link>
           </div>
         </div>
 
@@ -63,6 +60,7 @@ const Footer = () => (
         <div className="flex gap-4">
           <a href="#" className="hover:text-foreground transition-colors">Privacy</a>
           <a href="#" className="hover:text-foreground transition-colors">Terms</a>
+          <Link to="/faq" className="hover:text-foreground transition-colors">FAQ</Link>
         </div>
       </div>
     </div>
