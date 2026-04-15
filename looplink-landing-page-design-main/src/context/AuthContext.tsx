@@ -37,6 +37,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(data.session);
       setUser(data.session?.user ? toAuthUser(data.session.user) : null);
       setLoading(false);
+    }).catch(() => {
+      // Supabase not configured or network error — fail gracefully
+      setLoading(false);
     });
 
     // Listen for auth state changes (login, logout, token refresh)
