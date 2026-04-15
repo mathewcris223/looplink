@@ -1,9 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 
 const CTASection = () => {
   const ref = useScrollReveal<HTMLDivElement>();
+  const navigate = useNavigate();
 
   return (
     <section className="py-20 relative overflow-hidden">
@@ -40,6 +42,7 @@ const CTASection = () => {
               variant="hero"
               size="lg"
               className="text-base rounded-full px-10 py-6 animate-pulse-glow hover:scale-105 transition-transform duration-200 text-lg"
+              onClick={() => navigate("/signup")}
             >
               Get Started Free <ArrowRight size={20} />
             </Button>

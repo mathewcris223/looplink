@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, ChevronDown, TrendingUp } from "lucide-react";
 
@@ -103,7 +104,9 @@ const DashboardMockup = () => {
   );
 };
 
-const HeroSection = () => (
+const HeroSection = () => {
+  const navigate = useNavigate();
+  return (
   <section className="relative min-h-screen flex flex-col items-center justify-center pt-16 overflow-hidden">
     {/* Background layers */}
     <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
@@ -154,6 +157,7 @@ const HeroSection = () => (
               variant="hero"
               size="lg"
               className="text-base rounded-full px-8 animate-pulse-glow hover:scale-105 transition-transform duration-200"
+              onClick={() => navigate("/signup")}
             >
               Get Started Free <ArrowRight size={18} />
             </Button>
@@ -161,6 +165,7 @@ const HeroSection = () => (
               variant="hero-outline"
               size="lg"
               className="text-base rounded-full px-8 hover:scale-105 transition-transform duration-200"
+              onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}
             >
               See How It Works <ChevronDown size={18} />
             </Button>
@@ -193,6 +198,7 @@ const HeroSection = () => (
       <ChevronDown size={16} className="text-muted-foreground animate-bounce" />
     </div>
   </section>
-);
+  );
+};
 
 export default HeroSection;

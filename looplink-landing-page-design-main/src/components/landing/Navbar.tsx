@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -24,7 +26,7 @@ const Navbar = () => {
         </a>
 
         <div className="hidden md:flex items-center gap-8">
-          {["Features", "How It Works", "FAQ"].map((item) => (
+          {["Features", "How It Works"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/ /g, "-")}`}
@@ -34,7 +36,18 @@ const Navbar = () => {
               <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-gradient-brand transition-all duration-300 group-hover:w-full" />
             </a>
           ))}
-          <Button variant="hero" size="sm" className="animate-pulse-glow rounded-full px-5">
+          <button
+            onClick={() => navigate("/login")}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200"
+          >
+            Log in
+          </button>
+          <Button
+            variant="hero"
+            size="sm"
+            className="rounded-full px-5"
+            onClick={() => navigate("/signup")}
+          >
             Get Started Free
           </Button>
         </div>
@@ -50,7 +63,7 @@ const Navbar = () => {
 
       {open && (
         <div className="md:hidden glass border-t px-6 pb-5 pt-3 flex flex-col gap-1 animate-fade-up">
-          {["Features", "How It Works", "FAQ"].map((item) => (
+          {["Features", "How It Works"].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/ /g, "-")}`}
@@ -60,7 +73,13 @@ const Navbar = () => {
               {item}
             </a>
           ))}
-          <Button variant="hero" size="sm" className="w-full mt-2 rounded-full">
+          <button
+            onClick={() => { setOpen(false); navigate("/login"); }}
+            className="py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors text-left"
+          >
+            Log in
+          </button>
+          <Button variant="hero" size="sm" className="w-full mt-2 rounded-full" onClick={() => navigate("/signup")}>
             Get Started Free
           </Button>
         </div>
