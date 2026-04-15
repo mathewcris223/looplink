@@ -32,6 +32,8 @@ const AddTransactionModal = ({ businessId, defaultType, onClose, onSaved }: Prop
   const [parsed, setParsed] = useState<ParsedTransaction[]>([]);
   const [editingIdx, setEditingIdx] = useState(0);
   const recognitionRef = useRef<any>(null);
+  const transcriptRef = useRef("");
+  const processedRef = useRef(false);
 
   const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const SR = typeof window !== "undefined"
@@ -48,6 +50,8 @@ const AddTransactionModal = ({ businessId, defaultType, onClose, onSaved }: Prop
 
     setVoiceError("");
     setTranscript("");
+    transcriptRef.current = "";
+    processedRef.current = false;
     setParsed([]);
     setVoiceState("listening");
 
@@ -59,7 +63,6 @@ const AddTransactionModal = ({ businessId, defaultType, onClose, onSaved }: Prop
     recognition.continuous = false;
 
     recognition.onresult = (e: any) => {
-      // Show interim transcript live
       let interim = "";
       let final = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -67,19 +70,38 @@ const AddTransactionModal = ({ businessId, defaultType, onClose, onSaved }: Prop
         if (e.results[i].isFinal) final += t;
         else interim += t;
       }
-      setTranscript(final || interim);
+      const current = final || interim;
+      transcriptRef.current = current;
+      setTranscript(current);
+
+      // If we got a final result, process immediately — don't wait for onend
+      if (final) {
+        recognitionRef.current?.stop();
+        processTranscript(final);
+      }
     };
 
     recognition.onend = () => {
-      if (voiceState === "listening") processTranscript();
+      // Guard: if already processed (via onresult final or onerror), do nothing
+      if (processedRef.current) return;
+      if (transcriptRef.current.trim()) {
+        processTranscript(transcriptRef.current);
+      } else {
+        processedRef.current = true;
+        setVoiceError("No speech detected. Please speak louder or try again.");
+        setVoiceState("error");
+      }
     };
 
     recognition.onerror = (e: any) => {
+      processedRef.current = true; // prevent onend from overriding this
       recognitionRef.current = null;
       if (e.error === "no-speech") {
-        setVoiceError("No speech detected. Please try again.");
+        setVoiceError("No speech detected. Please speak louder or move closer to your microphone.");
       } else if (e.error === "not-allowed") {
-        setVoiceError("Microphone access denied. Please allow microphone in your browser settings.");
+        setVoiceError("Microphone access denied. Please allow microphone access in your browser settings.");
+      } else if (e.error === "network") {
+        setVoiceError("Network error. Speech recognition requires an internet connection.");
       } else {
         setVoiceError("Could not capture audio. Please try again.");
       }
@@ -91,34 +113,34 @@ const AddTransactionModal = ({ businessId, defaultType, onClose, onSaved }: Prop
 
   const stopListening = () => {
     recognitionRef.current?.stop();
-    processTranscript();
   };
 
   // ── Process transcript ───────────────────────────────────────────────────
-  const processTranscript = () => {
+  const processTranscript = (text: string) => {
+    if (processedRef.current) return; // prevent double-processing
+    processedRef.current = true;
     setVoiceState("processing");
     setTimeout(() => {
-      const text = transcript.trim();
-      if (!text) {
+      const trimmed = text.trim();
+      if (!trimmed) {
         setVoiceError("Sorry, we couldn't understand. Please try again.");
         setVoiceState("error");
         return;
       }
 
-      const result = parseVoiceInput(text);
+      const result = parseVoiceInput(trimmed);
 
       if (result.transactions.length === 0) {
-        setVoiceError(`We heard: "${text}" — but couldn't find any amounts or transaction details. Try saying something like "I sold 50k worth of shoes".`);
+        setVoiceError(`We heard: "${trimmed}" — but couldn't find any amounts or transaction details. Try saying something like "I sold 50k worth of shoes".`);
         setVoiceState("error");
         return;
       }
 
       setParsed(result.transactions);
       setEditingIdx(0);
-      // Pre-fill form with first parsed transaction
       applyParsed(result.transactions[0]);
       setVoiceState("preview");
-    }, 800);
+    }, 600);
   };
 
   const applyParsed = (tx: ParsedTransaction) => {
@@ -131,6 +153,8 @@ const AddTransactionModal = ({ businessId, defaultType, onClose, onSaved }: Prop
   const resetVoice = () => {
     setVoiceState("idle");
     setTranscript("");
+    transcriptRef.current = "";
+    processedRef.current = false;
     setVoiceError("");
     setParsed([]);
   };
