@@ -14,7 +14,7 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -24,15 +24,19 @@ const Login = () => {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const ok = login(form.email.trim(), form.password);
-      if (!ok) {
+    try {
+      await login(form.email.trim(), form.password);
+      navigate("/dashboard");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Login failed.";
+      if (msg.includes("Invalid login credentials")) {
         setError("Incorrect email or password.");
-        setLoading(false);
       } else {
-        navigate("/dashboard");
+        setError(msg);
       }
-    }, 600);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -84,14 +88,12 @@ const Login = () => {
           </div>
         </div>
 
-        {/* Error */}
         {error && (
           <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2.5">
             {error}
           </p>
         )}
 
-        {/* Submit */}
         <Button
           type="submit"
           variant="hero"

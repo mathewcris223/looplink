@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
-import { TrendingUp, TrendingDown, LogOut, BarChart3, Lightbulb } from "lucide-react";
+import { saveDailyEntry, getRecentEntries, DailyEntry } from "@/lib/db";
+import { TrendingUp, TrendingDown, LogOut, BarChart3, Lightbulb, History } from "lucide-react";
 
 interface Result {
   profit: number;
@@ -42,37 +43,69 @@ const getInsight = (sales: number, expenses: number): Result => {
   return { profit, margin, insight, status };
 };
 
+const statusColors = {
+  good: "text-emerald-600 bg-emerald-50 border-emerald-200",
+  warning: "text-amber-600 bg-amber-50 border-amber-200",
+  danger: "text-red-600 bg-red-50 border-red-200",
+};
+
 const Dashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
 
   const [sales, setSales] = useState("");
   const [expenses, setExpenses] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [history, setHistory] = useState<DailyEntry[]>([]);
 
-  // Redirect if not logged in
+  // Redirect if not logged in (wait for auth to hydrate first)
   useEffect(() => {
-    if (!user) navigate("/login");
-  }, [user, navigate]);
+    if (!authLoading && !user) navigate("/login");
+  }, [user, authLoading, navigate]);
+
+  // Load recent entries
+  useEffect(() => {
+    if (user) {
+      getRecentEntries().then(setHistory).catch(() => {});
+    }
+  }, [user]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   if (!user) return null;
 
-  const handleCalculate = (e: React.FormEvent) => {
+  const handleCalculate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError("");
     const s = parseFloat(sales) || 0;
     const ex = parseFloat(expenses) || 0;
-    setResult(getInsight(s, ex));
+    const res = getInsight(s, ex);
+    setResult(res);
+
+    // Save to Supabase
+    setSaving(true);
+    try {
+      const saved = await saveDailyEntry(s, ex);
+      setHistory((prev) => [saved, ...prev].slice(0, 7));
+    } catch (err) {
+      setSaveError("Could not save entry. Check your connection.");
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/");
-  };
-
-  const statusColors = {
-    good: "text-emerald-600 bg-emerald-50 border-emerald-200",
-    warning: "text-amber-600 bg-amber-50 border-amber-200",
-    danger: "text-red-600 bg-red-50 border-red-200",
   };
 
   return (
@@ -83,7 +116,7 @@ const Dashboard = () => {
           <span className="font-display text-xl font-bold text-gradient">LoopLink</span>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground hidden sm:block">
-              👋 Welcome, <strong className="text-foreground">{user.name}</strong>
+              👋 <strong className="text-foreground">{user.name}</strong>
             </span>
             <Button
               variant="ghost"
@@ -98,9 +131,9 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-6 py-12 max-w-2xl">
+      <main className="container mx-auto px-6 py-12 max-w-2xl space-y-6">
         {/* Welcome */}
-        <div className="mb-10 animate-fade-up">
+        <div className="animate-fade-up">
           <h1 className="font-display text-3xl md:text-4xl font-bold mb-1">
             Welcome back, <span className="text-gradient">{user.name.split(" ")[0]}</span> 👋
           </h1>
@@ -108,8 +141,11 @@ const Dashboard = () => {
         </div>
 
         {/* Calculator card */}
-        <div className="rounded-3xl border bg-card/90 backdrop-blur-xl shadow-xl p-8 space-y-6 animate-fade-up" style={{ animationDelay: "0.1s" }}>
-          <div className="flex items-center gap-3 mb-2">
+        <div
+          className="rounded-3xl border bg-card/90 backdrop-blur-xl shadow-xl p-8 space-y-6 animate-fade-up"
+          style={{ animationDelay: "0.1s" }}
+        >
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-brand flex items-center justify-center">
               <BarChart3 size={18} className="text-primary-foreground" />
             </div>
@@ -120,11 +156,8 @@ const Dashboard = () => {
           </div>
 
           <form onSubmit={handleCalculate} className="space-y-4">
-            {/* Sales */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="sales">
-                Total Sales (₦)
-              </label>
+              <label className="text-sm font-medium" htmlFor="sales">Total Sales (₦)</label>
               <input
                 id="sales"
                 type="number"
@@ -136,11 +169,8 @@ const Dashboard = () => {
               />
             </div>
 
-            {/* Expenses */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="expenses">
-                Total Expenses (₦)
-              </label>
+              <label className="text-sm font-medium" htmlFor="expenses">Total Expenses (₦)</label>
               <input
                 id="expenses"
                 type="number"
@@ -156,16 +186,20 @@ const Dashboard = () => {
               type="submit"
               variant="hero"
               size="lg"
+              disabled={saving}
               className="w-full rounded-xl text-base hover:scale-[1.02] transition-transform duration-200"
             >
-              Calculate Profit
+              {saving ? "Saving…" : "Calculate Profit"}
             </Button>
+
+            {saveError && (
+              <p className="text-xs text-destructive text-center">{saveError}</p>
+            )}
           </form>
 
           {/* Result */}
           {result && (
-            <div className="space-y-4 pt-2 animate-fade-up border-t">
-              {/* Profit / Expenses row */}
+            <div className="space-y-4 pt-2 border-t animate-fade-up">
               <div className="grid grid-cols-2 gap-3 pt-4">
                 <div className="rounded-2xl bg-muted/50 p-4 text-center">
                   <p className="text-xs text-muted-foreground mb-1">Profit</p>
@@ -182,7 +216,6 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* AI Insight */}
               <div className={`rounded-2xl border p-4 flex items-start gap-3 ${statusColors[result.status]}`}>
                 <Lightbulb size={18} className="shrink-0 mt-0.5" />
                 <div>
@@ -193,6 +226,37 @@ const Dashboard = () => {
             </div>
           )}
         </div>
+
+        {/* Recent history */}
+        {history.length > 0 && (
+          <div
+            className="rounded-3xl border bg-card/90 backdrop-blur-xl shadow-xl p-8 animate-fade-up"
+            style={{ animationDelay: "0.2s" }}
+          >
+            <div className="flex items-center gap-2 mb-5">
+              <History size={16} className="text-primary" />
+              <h3 className="font-display font-semibold">Recent Entries</h3>
+            </div>
+            <div className="space-y-2">
+              {history.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-muted/40 text-sm"
+                >
+                  <span className="text-muted-foreground text-xs">
+                    {entry.created_at
+                      ? new Date(entry.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                      : "Today"}
+                  </span>
+                  <span className="text-muted-foreground">Sales: ₦{entry.sales.toLocaleString()}</span>
+                  <span className={entry.profit >= 0 ? "text-emerald-600 font-semibold" : "text-destructive font-semibold"}>
+                    {entry.profit >= 0 ? "+" : ""}₦{entry.profit.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

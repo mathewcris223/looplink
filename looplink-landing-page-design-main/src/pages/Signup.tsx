@@ -14,7 +14,7 @@ const Signup = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -28,15 +28,20 @@ const Signup = () => {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const ok = signup(form.name.trim(), form.email.trim(), form.password);
-      if (!ok) {
+    try {
+      await signup(form.name.trim(), form.email.trim(), form.password);
+      navigate("/dashboard");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Signup failed. Please try again.";
+      // Surface friendly messages for common Supabase errors
+      if (msg.includes("already registered")) {
         setError("An account with this email already exists.");
-        setLoading(false);
       } else {
-        navigate("/dashboard");
+        setError(msg);
       }
-    }, 600);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -101,14 +106,12 @@ const Signup = () => {
           </div>
         </div>
 
-        {/* Error */}
         {error && (
           <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2.5">
             {error}
           </p>
         )}
 
-        {/* Submit */}
         <Button
           type="submit"
           variant="hero"
