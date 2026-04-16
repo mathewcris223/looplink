@@ -4,6 +4,23 @@
 
 import { Transaction } from "./db";
 
+export interface InventoryContextItem {
+  name: string;
+  itemType: string;
+  quantity: number | null;
+  costPrice: number | null;
+  sellingPrice: number;
+  totalUnitsSold: number;
+  totalLosses: number;
+  isDeadStock: boolean;
+  isLowStock: boolean;
+  status: string | null;
+}
+
+export interface InventoryContext {
+  items: InventoryContextItem[];
+}
+
 export interface AIRequestPayload {
   message: string;
   businessType?: string;
@@ -13,6 +30,7 @@ export interface AIRequestPayload {
   totalExpenses?: number;
   profit?: number;
   mode?: "chat" | "insights" | "coach";
+  inventoryContext?: InventoryContext;
 }
 
 export interface AIMessage {
@@ -50,6 +68,18 @@ function buildContextMessage(payload: AIRequestPayload): string {
       `  - [${t.type.toUpperCase()}] ₦${t.amount.toLocaleString()} | ${t.description} | ${t.category}`
     ).join("\n");
     parts.push(`Recent Transactions:\n${lines}`);
+  }
+  if (payload.inventoryContext?.items?.length) {
+    const lines = payload.inventoryContext.items.map(item => {
+      const stockInfo = item.quantity !== null ? `${item.quantity} in stock` : "service";
+      const flags = [
+        item.isLowStock ? "LOW STOCK" : null,
+        item.isDeadStock ? "DEAD STOCK" : null,
+        item.totalLosses > 3 ? `${item.totalLosses} losses` : null,
+      ].filter(Boolean).join(", ");
+      return `  - ${item.name} (${item.itemType}): ${stockInfo} | Sell ₦${item.sellingPrice.toLocaleString()} | ${item.totalUnitsSold} sold${flags ? ` | ⚠ ${flags}` : ""}`;
+    }).join("\n");
+    parts.push(`[Inventory Context]\n${lines}`);
   }
   return parts.length > 0 ? `[Business Context]\n${parts.join("\n")}` : "";
 }

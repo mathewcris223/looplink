@@ -34,11 +34,10 @@ const Footer = () => (
         <div className="space-y-4">
           <h4 className="text-sm font-semibold">Product</h4>
           <div className="flex flex-col gap-2.5 text-sm text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors w-fit">Features</a>
-            <a href="#how-it-works" className="hover:text-foreground transition-colors w-fit">How It Works</a>
-            <a href="#" className="hover:text-foreground transition-colors w-fit">About</a>
-            <a href="#" className="hover:text-foreground transition-colors w-fit">Privacy Policy</a>
             <Link to="/faq" className="hover:text-foreground transition-colors w-fit">FAQ</Link>
+            <a href="/#how-it-works" className="hover:text-foreground transition-colors w-fit">How It Works</a>
+            <a href="mailto:hello@looplink.app" className="hover:text-foreground transition-colors w-fit">Contact</a>
+            <a href="#" className="hover:text-foreground transition-colors w-fit">Terms</a>
           </div>
         </div>
 

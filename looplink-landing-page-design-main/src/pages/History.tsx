@@ -96,7 +96,12 @@ const History = () => {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{tx.description}</p>
-                          <p className="text-xs text-muted-foreground">{tx.category}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {tx.category}
+                            {tx.description.startsWith("Sold:") && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-medium">Inventory</span>
+                            )}
+                          </p>
                         </div>
                       </div>
                       <span className={`text-sm font-bold shrink-0 ml-3 ${tx.type === "income" ? "text-emerald-600" : "text-red-500"}`}>

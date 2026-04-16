@@ -1,0 +1,126 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { addInventoryItemV2 } from "@/lib/db";
+import { X } from "lucide-react";
+import VoiceMicButton from "@/components/ui/VoiceMicButton";
+import ImageScanButton from "@/components/ui/ImageScanButton";
+import { extractNumber } from "@/hooks/useVoiceInput";
+
+interface Props {
+  businessId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const AddProductModal = ({ businessId, onClose, onSuccess }: Props) => {
+  const [name, setName] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [costPrice, setCostPrice] = useState("");
+  const [sellingPrice, setSellingPrice] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!name.trim()) { setError("Enter an item name."); return; }
+    if (!sellingPrice || parseFloat(sellingPrice) < 0) { setError("Enter a selling price."); return; }
+    setLoading(true);
+    try {
+      await addInventoryItemV2({
+        businessId,
+        name: name.trim(),
+        itemType: "product",
+        quantity: quantity ? parseInt(quantity) : 0,
+        costPrice: costPrice ? parseFloat(costPrice) : undefined,
+        sellingPrice: parseFloat(sellingPrice),
+        lowStockThreshold: 5,
+      });
+      onSuccess();
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputCls = "w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-3xl border bg-card shadow-2xl p-6 animate-fade-up max-h-[92dvh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-display font-bold text-lg">Add Item</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+        </div>
+
+        {/* Scan from image */}
+        <div className="mb-4">
+          <ImageScanButton onResult={data => {
+            if (data.itemName) setName(data.itemName);
+            if (data.quantity) setQuantity(String(data.quantity));
+            if (data.amount) { data.type === "expense" ? setCostPrice(String(data.amount)) : setSellingPrice(String(data.amount)); }
+          }} />
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Item Name</label>
+            <div className="relative mt-1.5">
+              <input autoFocus className={`${inputCls} pr-9`} placeholder="e.g. Coca-Cola, Shoes, Rice"
+                value={name} onChange={e => setName(e.target.value)} />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <VoiceMicButton onResult={v => setName(v)} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">How many do you have?</label>
+            <div className="relative mt-1.5">
+              <input type="number" min="0" className={`${inputCls} pr-9`} placeholder="e.g. 50"
+                value={quantity} onChange={e => setQuantity(e.target.value)} />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <VoiceMicButton onResult={v => setQuantity(extractNumber(v))} transform={extractNumber} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Cost Price (₦)</label>
+              <p className="text-xs text-muted-foreground mb-1.5">What you paid</p>
+              <div className="relative">
+                <input type="number" min="0" className={`${inputCls} pr-9`} placeholder="e.g. 500"
+                  value={costPrice} onChange={e => setCostPrice(e.target.value)} />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  <VoiceMicButton onResult={v => setCostPrice(extractNumber(v))} transform={extractNumber} />
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Selling Price (₦)</label>
+              <p className="text-xs text-muted-foreground mb-1.5">What you charge</p>
+              <div className="relative">
+                <input type="number" min="0" className={`${inputCls} pr-9`} placeholder="e.g. 800"
+                  value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  <VoiceMicButton onResult={v => setSellingPrice(extractNumber(v))} transform={extractNumber} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
+          <Button type="submit" variant="hero" size="lg" disabled={loading} className="w-full rounded-xl">
+            {loading ? "Saving..." : "Add Item"}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default AddProductModal;

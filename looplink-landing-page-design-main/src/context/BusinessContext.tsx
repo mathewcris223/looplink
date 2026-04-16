@@ -13,17 +13,22 @@ interface BusinessContextType {
 const BusinessContext = createContext<BusinessContextType | null>(null);
 
 export const BusinessProvider = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [activeBusiness, setActiveBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refreshBusinesses = async () => {
-    if (!user) { setLoading(false); return; }
+    if (!user) {
+      setBusinesses([]);
+      setActiveBusiness(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     try {
       const list = await getBusinesses();
       setBusinesses(list);
-      // Restore last active or default to first
       const savedId = localStorage.getItem("ll_active_biz");
       const found = list.find(b => b.id === savedId) ?? list[0] ?? null;
       setActiveBusiness(found);
@@ -34,7 +39,10 @@ export const BusinessProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  useEffect(() => { refreshBusinesses(); }, [user]);
+  // Don't run until auth is resolved — prevents false "no business" flash
+  useEffect(() => {
+    if (!authLoading) refreshBusinesses();
+  }, [user, authLoading]);
 
   const handleSetActive = (b: Business) => {
     setActiveBusiness(b);

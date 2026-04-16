@@ -3,15 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
+import { useInventory } from "@/context/InventoryContext";
 import AppShell from "@/components/dashboard/AppShell";
 import AddTransactionModal from "@/components/dashboard/AddTransactionModal";
 import { getTransactions, Transaction } from "@/lib/db";
 import { calcHealthScore, generateInsights, AIInsight } from "@/lib/ai";
-import { TrendingUp, TrendingDown, Plus, Lightbulb, Activity, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Plus, Lightbulb, Activity, ArrowUpRight, ArrowDownRight, BarChart3, MessageSquare, Package } from "lucide-react";
 
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const { businesses, activeBusiness, setActiveBusiness, refreshBusinesses, loading: bizLoading } = useBusiness();
+  const { inventoryItems } = useInventory();
   const navigate = useNavigate();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -26,8 +28,12 @@ const Dashboard = () => {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (!bizLoading && user && businesses.length === 0) navigate("/onboarding");
-  }, [bizLoading, businesses, user, navigate]);
+    // Only redirect to onboarding if user is fully loaded AND has no businesses
+    // This prevents the redirect from firing on every login
+    if (!bizLoading && !authLoading && user && businesses.length === 0) {
+      navigate("/onboarding");
+    }
+  }, [bizLoading, authLoading, businesses, user, navigate]);
 
   const loadTransactions = useCallback(async () => {
     if (!activeBusiness) return;
@@ -101,14 +107,14 @@ const Dashboard = () => {
           { label: "Net Profit", value: `${profit >= 0 ? "+" : ""}₦${profit.toLocaleString()}`, icon: TrendingUp, color: profit >= 0 ? "text-emerald-600" : "text-red-500", bg: profit >= 0 ? "bg-emerald-50" : "bg-red-50" },
           { label: "Profit Margin", value: `${margin.toFixed(1)}%`, icon: Activity, color: margin >= 20 ? "text-emerald-600" : "text-amber-600", bg: margin >= 20 ? "bg-emerald-50" : "bg-amber-50" },
         ].map(s => (
-          <div key={s.label} className="rounded-2xl border bg-card p-3 md:p-5 space-y-2 md:space-y-3">
+          <div key={s.label} className="rounded-2xl border bg-card p-3 md:p-5 space-y-2 md:space-y-3 shadow-md">
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground font-medium leading-tight">{s.label}</p>
-              <div className={`w-7 h-7 md:w-8 md:h-8 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
-                <s.icon size={14} className={s.color} />
+              <div className={`w-10 h-10 rounded-2xl ${s.bg} flex items-center justify-center shrink-0`}>
+                <s.icon size={16} className={s.color} />
               </div>
             </div>
-            <p className={`text-lg md:text-2xl font-bold font-display ${s.color} truncate`}>{s.value}</p>
+            <p className={`text-xl md:text-2xl font-bold font-display ${s.color} truncate`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -179,7 +185,7 @@ const Dashboard = () => {
         </div>
 
         {/* Right col */}
-        <div className="space-y-6">
+        <div className="lg:col-span-1 space-y-6">
           {/* Health score */}
           <div className="rounded-2xl border bg-card p-5">
             <div className="flex items-center gap-2 mb-4">
@@ -216,17 +222,64 @@ const Dashboard = () => {
             <h2 className="font-display font-semibold mb-4">Quick Actions</h2>
             <div className="space-y-2">
               {[
-                { label: "Add Income", action: () => { setAddType("income"); setShowAddModal(true); }, variant: "hero" as const },
-                { label: "Add Expense", action: () => { setAddType("expense"); setShowAddModal(true); }, variant: "hero-outline" as const },
-                { label: "View Analytics", action: () => navigate("/analytics"), variant: "hero-outline" as const },
-                { label: "AI Coach", action: () => navigate("/coach"), variant: "hero-outline" as const },
+                { label: "Add Income", desc: "Record a sale", icon: ArrowUpRight, color: "emerald", action: () => { setAddType("income"); setShowAddModal(true); } },
+                { label: "Add Expense", desc: "Log a cost", icon: ArrowDownRight, color: "red", action: () => { setAddType("expense"); setShowAddModal(true); } },
+                { label: "View Analytics", desc: "See your trends", icon: BarChart3, color: "blue", action: () => navigate("/analytics") },
+                { label: "AI Chat", desc: "Ask your advisor", icon: MessageSquare, color: "purple", action: () => navigate("/chat") },
               ].map(a => (
-                <Button key={a.label} variant={a.variant} size="sm" className="w-full rounded-xl justify-start" onClick={a.action}>
-                  {a.label}
-                </Button>
+                <div
+                  key={a.label}
+                  onClick={a.action}
+                  className="flex items-center gap-3 p-3 rounded-2xl border bg-card cursor-pointer hover:bg-muted/60 hover:scale-[1.02] hover:shadow-md transition-all duration-200"
+                >
+                  <div className={`w-9 h-9 rounded-xl bg-${a.color}-100 flex items-center justify-center shrink-0`}>
+                    <a.icon size={16} className={`text-${a.color}-600`} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{a.label}</p>
+                    <p className="text-xs text-muted-foreground">{a.desc}</p>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
+
+          {/* Inventory summary — always visible */}
+          {inventoryItems.length > 0 && (
+            <div className="rounded-2xl border bg-card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Package size={16} className="text-primary" />
+                  <h2 className="font-display font-semibold">Inventory</h2>
+                </div>
+                <button onClick={() => navigate("/inventory")} className="text-xs text-primary hover:underline">View all</button>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total items</span>
+                  <span className="font-semibold">{inventoryItems.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Stock value</span>
+                  <span className="font-semibold text-emerald-600">
+                    ₦{inventoryItems.filter(i => i.item_type !== "service").reduce((s, i) => s + (i.quantity ?? 0) * (i.cost_price ?? 0), 0).toLocaleString()}
+                  </span>
+                </div>
+                {inventoryItems.filter(i => i.status === "low_stock").length > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-amber-600">Low stock</span>
+                    <span className="font-semibold text-amber-600">{inventoryItems.filter(i => i.status === "low_stock").length} items</span>
+                  </div>
+                )}
+                {inventoryItems.filter(i => i.status === "out_of_stock").length > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-red-600">Out of stock</span>
+                    <span className="font-semibold text-red-600">{inventoryItems.filter(i => i.status === "out_of_stock").length} items</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

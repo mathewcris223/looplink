@@ -23,8 +23,15 @@ export interface CoachReport {
 }
 
 // ── Business Health Score ────────────────────────────────────────────────────
-export function calcHealthScore(transactions: Transaction[]): HealthScore {
-  if (!transactions.length) return { score: 0, label: "Poor", color: "text-red-500", bgColor: "bg-red-50" };
+
+export interface InventoryMetrics {
+  deadStockCount: number;
+  highLossItemCount: number;
+  outOfStockCount: number;
+}
+
+export function calcHealthScore(transactions: Transaction[], inventoryMetrics?: InventoryMetrics): HealthScore {
+  if (!transactions.length && !inventoryMetrics) return { score: 0, label: "Poor", color: "text-red-500", bgColor: "bg-red-50" };
 
   const income = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -32,7 +39,6 @@ export function calcHealthScore(transactions: Transaction[]): HealthScore {
   const margin = income > 0 ? (profit / income) * 100 : 0;
   const expenseRatio = income > 0 ? (expenses / income) * 100 : 100;
 
-  // Score components
   let score = 50;
   if (margin >= 40) score += 30;
   else if (margin >= 25) score += 20;
@@ -43,9 +49,15 @@ export function calcHealthScore(transactions: Transaction[]): HealthScore {
   else if (expenseRatio < 70) score += 10;
   else if (expenseRatio > 90) score -= 20;
 
-  // Consistency bonus — more transactions = more active
   if (transactions.length >= 20) score += 10;
   else if (transactions.length >= 10) score += 5;
+
+  // Inventory penalties
+  if (inventoryMetrics) {
+    score -= inventoryMetrics.deadStockCount * 2;
+    score -= inventoryMetrics.highLossItemCount * 5;
+    score -= Math.min(inventoryMetrics.outOfStockCount * 3, 15);
+  }
 
   score = Math.max(0, Math.min(100, score));
 

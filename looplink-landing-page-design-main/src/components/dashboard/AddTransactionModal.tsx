@@ -3,6 +3,9 @@ import { Button } from "@/components/ui/button";
 import { addTransaction } from "@/lib/db";
 import { parseVoiceInput, ParsedTransaction } from "@/lib/voiceParser";
 import { X, Mic, MicOff, CheckCircle2, Edit3, AlertCircle } from "lucide-react";
+import ImageScanButton from "@/components/ui/ImageScanButton";
+import VoiceMicButton from "@/components/ui/VoiceMicButton";
+import { extractNumber } from "@/hooks/useVoiceInput";
 
 const EXPENSE_CATEGORIES = ["Stock", "Transport", "Rent", "Staff", "Marketing", "Other"];
 const INCOME_CATEGORIES = ["Product Sale", "Service", "Commission", "Other"];
@@ -367,6 +370,15 @@ const AddTransactionModal = ({ businessId, defaultType, onClose, onSaved }: Prop
           )}
         </div>
 
+        {/* Image scan */}
+        <div className="mb-4">
+          <ImageScanButton onResult={data => {
+            if (data.type) setType(data.type);
+            if (data.amount) setAmount(String(data.amount));
+            if (data.itemName) setDescription(data.itemName);
+          }} />
+        </div>
+
         {/* Type toggle */}
         <div className="flex rounded-xl bg-muted p-1 mb-5">
           {(["income", "expense"] as const).map(t => (
@@ -381,17 +393,27 @@ const AddTransactionModal = ({ businessId, defaultType, onClose, onSaved }: Prop
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Amount (₦)</label>
-            <input type="number" min="0" placeholder="e.g. 15000"
-              value={amount} onChange={e => setAmount(e.target.value)}
-              className="w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
+            <div className="relative">
+              <input type="number" min="0" placeholder="e.g. 15000"
+                value={amount} onChange={e => setAmount(e.target.value)}
+                className="w-full rounded-xl border bg-muted/40 px-4 py-3 pr-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <VoiceMicButton onResult={v => setAmount(extractNumber(v))} transform={extractNumber} />
+              </div>
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">{type === "income" ? "What was sold / source" : "What was it for"}</label>
-            <input type="text" placeholder={type === "income" ? "e.g. Sold 10 bags" : "e.g. Bought stock"}
-              value={description} onChange={e => setDescription(e.target.value)}
-              className="w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
+            <div className="relative">
+              <input type="text" placeholder={type === "income" ? "e.g. Sold 10 bags" : "e.g. Bought stock"}
+                value={description} onChange={e => setDescription(e.target.value)}
+                className="w-full rounded-xl border bg-muted/40 px-4 py-3 pr-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <VoiceMicButton onResult={v => setDescription(v)} />
+              </div>
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Category</label>

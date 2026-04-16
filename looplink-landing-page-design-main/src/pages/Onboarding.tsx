@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { createBusiness } from "@/lib/db";
@@ -17,8 +17,15 @@ const bizTypes = [
 
 const Onboarding = () => {
   const { user } = useAuth();
-  const { refreshBusinesses } = useBusiness();
+  const { refreshBusinesses, businesses, loading: bizLoading } = useBusiness();
   const navigate = useNavigate();
+
+  // If user already has a business, skip onboarding entirely
+  useEffect(() => {
+    if (!bizLoading && businesses.length > 0) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [bizLoading, businesses, navigate]);
 
   const [step, setStep] = useState<"type" | "name">("type");
   const [selectedType, setSelectedType] = useState("");

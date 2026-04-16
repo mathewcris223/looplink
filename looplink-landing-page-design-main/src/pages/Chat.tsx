@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
+import { useInventory } from "@/context/InventoryContext";
 import AppShell from "@/components/dashboard/AppShell";
-import { getTransactions, Transaction } from "@/lib/db";
-import { aiStream, AIMessage } from "@/lib/aiClient";
+import { getTransactions, getInventorySales, Transaction } from "@/lib/db";
+import { aiStream, aiRequest, AIMessage } from "@/lib/aiClient";
 import { Button } from "@/components/ui/button";
 import { Send, Mic, MicOff, Bot, User, AlertCircle, Sparkles } from "lucide-react";
 
@@ -23,14 +24,26 @@ const SR = typeof window !== "undefined"
 const Chat = () => {
   const { user, loading: authLoading } = useAuth();
   const { businesses, activeBusiness, setActiveBusiness, loading: bizLoading } = useBusiness();
+  const { sellsGoods, inventoryItems } = useInventory();
   const navigate = useNavigate();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [messages, setMessages] = useState<AIMessage[]>([]);
+  const [messages, setMessages] = useState<AIMessage[]>(() => {
+    try {
+      const saved = sessionStorage.getItem("ll_chat_history");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
   const [listening, setListening] = useState(false);
+  const [chipMap, setChipMap] = useState<Map<number, string[]>>(new Map());
+
+  const CHIP_PROMPT = `Based on your last response, suggest 2-4 short follow-up questions or actions the user might want. Return ONLY a JSON array of strings, max 8 words each. Always include at least one of: "Give me a step-by-step plan", "Analyze my performance", "Suggest business ideas".`;
+  const FALLBACK_CHIPS = ["Give me a step-by-step plan", "Analyze my performance", "Suggest business ideas"];
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -51,6 +64,13 @@ const Chat = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Persist chat history to sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("ll_chat_history", JSON.stringify(messages));
+    } catch { /* private browsing — ignore */ }
+  }, [messages]);
+
   if (authLoading || bizLoading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" /></div>;
   }
@@ -59,6 +79,26 @@ const Chat = () => {
   const income = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const profit = income - expenses;
+
+  const generateChips = async (msgIndex: number, lastResponse: string) => {
+    try {
+      const raw = await aiRequest({
+        message: CHIP_PROMPT + `\n\nYour last response was: "${lastResponse.slice(0, 300)}"`,
+        businessType: activeBusiness.type,
+        businessName: activeBusiness.name,
+        mode: "chat",
+      });
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (match) {
+        const chips = JSON.parse(match[0]) as string[];
+        if (Array.isArray(chips) && chips.length >= 2) {
+          setChipMap(prev => new Map(prev).set(msgIndex, chips.slice(0, 4)));
+          return;
+        }
+      }
+    } catch { /* silent */ }
+    setChipMap(prev => new Map(prev).set(msgIndex, FALLBACK_CHIPS));
+  };
 
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
@@ -78,7 +118,26 @@ const Chat = () => {
     abortRef.current = new AbortController();
 
     try {
-      await aiStream(
+      // Build inventory context if user sells goods
+      let inventoryContext: import("@/lib/aiClient").InventoryContext | undefined;
+      if (sellsGoods && inventoryItems.length > 0) {
+        try {
+          const sales = activeBusiness ? await getInventorySales(activeBusiness.id) : [];
+          const salesByItem: Record<string, number> = {};
+          sales.forEach(s => { salesByItem[s.item_id] = (salesByItem[s.item_id] || 0) + s.quantity_sold; });
+          inventoryContext = {
+            items: inventoryItems.map(item => ({
+              name: item.name,
+              quantity: item.quantity,
+              costPrice: item.cost_price,
+              sellingPrice: item.selling_price,
+              totalUnitsSold: salesByItem[item.id] || 0,
+            })),
+          };
+        } catch { /* silent — inventory context is non-critical */ }
+      }
+
+      const full = await aiStream(
         {
           message: trimmed,
           businessType: activeBusiness.type,
@@ -88,6 +147,7 @@ const Chat = () => {
           totalExpenses: expenses,
           profit,
           mode: "chat",
+          inventoryContext,
         },
         messages, // history before this message
         (delta) => {
@@ -102,6 +162,11 @@ const Chat = () => {
         },
         abortRef.current.signal
       );
+      setStreaming(false);
+      abortRef.current = null;
+      const assistantMsgIndex = updatedHistory.length; // index of the assistant message
+      generateChips(assistantMsgIndex, full);
+      return;
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortError") return;
       const msg = err instanceof Error ? err.message : "Something went wrong. Try again.";
@@ -192,27 +257,42 @@ const Chat = () => {
 
           {/* Message list */}
           {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-2 md:gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-              <div className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 ${
-                msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-gradient-brand text-primary-foreground"
-              }`}>
-                {msg.role === "user" ? <User size={13} /> : <Bot size={13} />}
+            <div key={i} className="flex flex-col">
+              <div className={`flex gap-2 md:gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                <div className={`w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center shrink-0 ${
+                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-gradient-brand text-primary-foreground"
+                }`}>
+                  {msg.role === "user" ? <User size={13} /> : <Bot size={13} />}
+                </div>
+                <div className={`max-w-[85%] md:max-w-[80%] rounded-2xl px-3 md:px-4 py-2.5 md:py-3 text-sm leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground rounded-tr-sm"
+                    : "bg-muted/60 text-foreground rounded-tl-sm"
+                }`}>
+                  {msg.content === "" && msg.role === "assistant" ? (
+                    <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </span>
+                  ) : (
+                    <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                  )}
+                </div>
               </div>
-              <div className={`max-w-[85%] md:max-w-[80%] rounded-2xl px-3 md:px-4 py-2.5 md:py-3 text-sm leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground rounded-tr-sm"
-                  : "bg-muted/60 text-foreground rounded-tl-sm"
-              }`}>
-                {msg.content === "" && msg.role === "assistant" ? (
-                  <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </span>
-                ) : (
-                  <span className="whitespace-pre-wrap break-words">{msg.content}</span>
-                )}
-              </div>
+              {msg.role === "assistant" && msg.content && !streaming && chipMap.get(i) && (
+                <div className="flex flex-wrap gap-2 mt-2 ml-10">
+                  {chipMap.get(i)!.map((chip, ci) => (
+                    <button
+                      key={ci}
+                      onClick={() => sendMessage(chip)}
+                      className="px-3 py-1.5 rounded-full border text-xs font-medium bg-card hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
 

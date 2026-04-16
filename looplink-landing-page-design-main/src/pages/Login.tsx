@@ -17,15 +17,15 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
     if (!form.email.trim() || !form.password.trim()) {
       setError("Please enter your email and password.");
       return;
     }
-
     setLoading(true);
     try {
       await login(form.email.trim(), form.password);
+      // BusinessContext will load businesses automatically via onAuthStateChange
+      // Dashboard handles the redirect to onboarding if no business exists
       navigate("/dashboard");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Login failed.";
