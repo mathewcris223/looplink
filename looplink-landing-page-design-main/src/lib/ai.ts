@@ -1,4 +1,5 @@
 import { Transaction } from "./db";
+import { aiRequest } from "./aiClient";
 
 export interface AIInsight {
   type: "success" | "warning" | "danger" | "tip";
@@ -55,67 +56,133 @@ export function calcHealthScore(transactions: Transaction[]): HealthScore {
   return { score, label: "Critical", color: "text-red-600", bgColor: "bg-red-50" };
 }
 
-// ── Contextual Insights ──────────────────────────────────────────────────────
-export function generateInsights(transactions: Transaction[], businessType: string): AIInsight[] {
-  const insights: AIInsight[] = [];
+// ── AI-Powered Insights ───────────────────────────────────────────────────────
+// Calls the real OpenAI API via Supabase Edge Function.
+// Falls back to rule-based insights if the API is unavailable.
+export async function generateInsights(
+  transactions: Transaction[],
+  businessType: string,
+  businessName?: string
+): Promise<AIInsight[]> {
   if (!transactions.length) {
-    insights.push({ type: "tip", title: "Get Started", message: "Add your first income or expense to start receiving AI insights about your business." });
-    return insights;
+    return [{ type: "tip", title: "Get Started", message: "Add your first income or expense to start receiving AI insights about your business." }];
   }
 
+  const income = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const expenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const profit = income - expenses;
+
+  try {
+    const raw = await aiRequest({
+      message: `Analyze this business and give me exactly 4 insights as a JSON array. Each insight must have: type ("success"|"warning"|"danger"|"tip"), title (max 5 words), message (1-2 sentences, specific to the data). Return ONLY valid JSON array, no markdown, no explanation.`,
+      businessType,
+      businessName,
+      transactions: transactions.slice(0, 30),
+      totalIncome: income,
+      totalExpenses: expenses,
+      profit,
+      mode: "insights",
+    });
+
+    // Parse JSON from AI response
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as AIInsight[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed.slice(0, 4);
+    }
+  } catch {
+    // Fall through to rule-based fallback
+  }
+
+  // Rule-based fallback
+  return generateInsightsFallback(transactions, businessType);
+}
+
+function generateInsightsFallback(transactions: Transaction[], businessType: string): AIInsight[] {
+  const insights: AIInsight[] = [];
   const income = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const profit = income - expenses;
   const margin = income > 0 ? (profit / income) * 100 : 0;
   const expenseRatio = income > 0 ? (expenses / income) * 100 : 100;
 
-  // Expense category breakdown
   const expByCategory: Record<string, number> = {};
   transactions.filter(t => t.type === "expense").forEach(t => {
     expByCategory[t.category] = (expByCategory[t.category] || 0) + t.amount;
   });
   const topExpCategory = Object.entries(expByCategory).sort((a, b) => b[1] - a[1])[0];
 
-  // Profit insight
-  if (margin >= 40) {
-    insights.push({ type: "success", title: "Strong Profit Margin", message: `Your ${margin.toFixed(0)}% profit margin is excellent. You're running a healthy business.` });
-  } else if (margin >= 20) {
-    insights.push({ type: "tip", title: "Good Margin, Room to Grow", message: `Your ${margin.toFixed(0)}% margin is solid. Focus on growing income to push it above 40%.` });
-  } else if (margin < 0) {
-    insights.push({ type: "danger", title: "You're Running at a Loss", message: `You're spending more than you earn. Cut expenses immediately or find new income sources.` });
-  } else {
-    insights.push({ type: "warning", title: "Low Profit Margin", message: `Your ${margin.toFixed(0)}% margin is below average. Target at least 25% for a sustainable business.` });
-  }
+  if (margin >= 40) insights.push({ type: "success", title: "Strong Profit Margin", message: `Your ${margin.toFixed(0)}% profit margin is excellent. You're running a healthy business.` });
+  else if (margin >= 20) insights.push({ type: "tip", title: "Good Margin, Room to Grow", message: `Your ${margin.toFixed(0)}% margin is solid. Focus on growing income to push it above 40%.` });
+  else if (margin < 0) insights.push({ type: "danger", title: "You're Running at a Loss", message: `You're spending more than you earn. Cut expenses immediately or find new income sources.` });
+  else insights.push({ type: "warning", title: "Low Profit Margin", message: `Your ${margin.toFixed(0)}% margin is below average. Target at least 25% for a sustainable business.` });
 
-  // Expense ratio
-  if (expenseRatio > 80) {
-    insights.push({ type: "danger", title: "Expenses Too High", message: `${expenseRatio.toFixed(0)}% of your income goes to expenses. This is unsustainable — review your costs urgently.` });
-  }
-
-  // Top expense category
+  if (expenseRatio > 80) insights.push({ type: "danger", title: "Expenses Too High", message: `${expenseRatio.toFixed(0)}% of your income goes to expenses. This is unsustainable — review your costs urgently.` });
   if (topExpCategory) {
     const pct = income > 0 ? ((topExpCategory[1] / income) * 100).toFixed(0) : "0";
     insights.push({ type: "tip", title: `High ${topExpCategory[0]} Costs`, message: `${topExpCategory[0]} is your biggest expense at ${pct}% of income. Look for ways to reduce it.` });
   }
 
-  // Business-type specific insights
-  if (businessType === "food") {
-    insights.push({ type: "tip", title: "Food Business Tip", message: "Track ingredient costs daily. Perishable waste is a silent profit killer in food businesses." });
-  } else if (businessType === "fashion") {
-    insights.push({ type: "tip", title: "Fashion Business Tip", message: "Weekend sales tend to be higher for fashion. Consider running promotions on Fridays to boost weekend traffic." });
-  } else if (businessType === "retail") {
-    insights.push({ type: "tip", title: "Retail Tip", message: "Monitor your stock-to-sales ratio. Overstocking ties up cash that could be used elsewhere." });
-  } else if (businessType === "online") {
-    insights.push({ type: "tip", title: "Online Business Tip", message: "Track your marketing spend vs revenue generated. A good ROI is at least 3x your ad spend." });
-  } else if (businessType === "service") {
-    insights.push({ type: "tip", title: "Service Business Tip", message: "Your biggest asset is your time. Track billable hours and ensure your rates reflect your true costs." });
-  }
+  const tipMap: Record<string, AIInsight> = {
+    food: { type: "tip", title: "Food Business Tip", message: "Track ingredient costs daily. Perishable waste is a silent profit killer in food businesses." },
+    fashion: { type: "tip", title: "Fashion Business Tip", message: "Weekend sales tend to be higher for fashion. Consider running promotions on Fridays." },
+    retail: { type: "tip", title: "Retail Tip", message: "Monitor your stock-to-sales ratio. Overstocking ties up cash that could be used elsewhere." },
+    online: { type: "tip", title: "Online Business Tip", message: "Track your marketing spend vs revenue. A good ROI is at least 3x your ad spend." },
+    service: { type: "tip", title: "Service Business Tip", message: "Your biggest asset is your time. Ensure your rates reflect your true costs." },
+  };
+  if (tipMap[businessType]) insights.push(tipMap[businessType]);
 
   return insights.slice(0, 4);
 }
 
-// ── AI Coach Report ──────────────────────────────────────────────────────────
-export function generateCoachReport(transactions: Transaction[], businessType: string, businessName: string): CoachReport {
+// ── AI Coach Report ───────────────────────────────────────────────────────────
+// Calls real OpenAI API. Falls back to rule-based if unavailable.
+export async function generateCoachReport(
+  transactions: Transaction[],
+  businessType: string,
+  businessName: string
+): Promise<CoachReport> {
+  const income = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const expenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const profit = income - expenses;
+
+  if (!transactions.length) {
+    return {
+      working: ["No data yet — start adding transactions to get your full analysis."],
+      problems: [],
+      improve: ["Add at least 7 days of income and expense data for accurate insights."],
+      stop: [],
+      strategy: ["Consistency is key. Log every transaction, no matter how small."],
+    };
+  }
+
+  try {
+    const raw = await aiRequest({
+      message: `Generate a comprehensive business coach report as a JSON object with exactly these keys: "working" (array of 3-4 strings), "problems" (array of 2-4 strings), "improve" (array of 3-4 strings), "stop" (array of 2-3 strings), "strategy" (array of 3-4 strings). Each string should be 1-2 sentences, specific to the financial data provided. Return ONLY valid JSON, no markdown, no explanation.`,
+      businessType,
+      businessName,
+      transactions: transactions.slice(0, 50),
+      totalIncome: income,
+      totalExpenses: expenses,
+      profit,
+      mode: "coach",
+    });
+
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as CoachReport;
+      if (parsed.working && parsed.problems && parsed.improve && parsed.stop && parsed.strategy) {
+        return parsed;
+      }
+    }
+  } catch {
+    // Fall through to rule-based fallback
+  }
+
+  return generateCoachReportFallback(transactions, businessType, businessName);
+}
+
+function generateCoachReportFallback(transactions: Transaction[], businessType: string, businessName: string): CoachReport {
   const income = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const profit = income - expenses;

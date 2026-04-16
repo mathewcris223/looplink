@@ -6,7 +6,7 @@ import { useBusiness } from "@/context/BusinessContext";
 import AppShell from "@/components/dashboard/AppShell";
 import AddTransactionModal from "@/components/dashboard/AddTransactionModal";
 import { getTransactions, Transaction } from "@/lib/db";
-import { calcHealthScore, generateInsights } from "@/lib/ai";
+import { calcHealthScore, generateInsights, AIInsight } from "@/lib/ai";
 import { TrendingUp, TrendingDown, Plus, Lightbulb, Activity, ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 const Dashboard = () => {
@@ -18,6 +18,8 @@ const Dashboard = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addType, setAddType] = useState<"income" | "expense">("income");
   const [txLoading, setTxLoading] = useState(false);
+  const [insights, setInsights] = useState<AIInsight[]>([]);
+  const [insightsLoading, setInsightsLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/login");
@@ -33,6 +35,13 @@ const Dashboard = () => {
     try {
       const data = await getTransactions(activeBusiness.id, 100);
       setTransactions(data);
+      // Load AI insights after transactions are fetched
+      setInsightsLoading(true);
+      try {
+        const aiInsights = await generateInsights(data, activeBusiness.type, activeBusiness.name);
+        setInsights(aiInsights);
+      } catch { /* silent — insights are non-critical */ }
+      finally { setInsightsLoading(false); }
     } catch { /* silent */ }
     finally { setTxLoading(false); }
   }, [activeBusiness]);
@@ -49,7 +58,6 @@ const Dashboard = () => {
   const profit = income - expenses;
   const margin = income > 0 ? (profit / income) * 100 : 0;
   const health = calcHealthScore(transactions);
-  const insights = generateInsights(transactions, activeBusiness.type);
   const recent = transactions.slice(0, 5);
 
   const insightColors = {
@@ -86,26 +94,26 @@ const Dashboard = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
         {[
           { label: "Total Income", value: `₦${income.toLocaleString()}`, icon: ArrowUpRight, color: "text-emerald-600", bg: "bg-emerald-50" },
           { label: "Total Expenses", value: `₦${expenses.toLocaleString()}`, icon: ArrowDownRight, color: "text-red-500", bg: "bg-red-50" },
           { label: "Net Profit", value: `${profit >= 0 ? "+" : ""}₦${profit.toLocaleString()}`, icon: TrendingUp, color: profit >= 0 ? "text-emerald-600" : "text-red-500", bg: profit >= 0 ? "bg-emerald-50" : "bg-red-50" },
           { label: "Profit Margin", value: `${margin.toFixed(1)}%`, icon: Activity, color: margin >= 20 ? "text-emerald-600" : "text-amber-600", bg: margin >= 20 ? "bg-emerald-50" : "bg-amber-50" },
         ].map(s => (
-          <div key={s.label} className="rounded-2xl border bg-card p-4 md:p-5 space-y-3">
+          <div key={s.label} className="rounded-2xl border bg-card p-3 md:p-5 space-y-2 md:space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
-              <div className={`w-8 h-8 rounded-xl ${s.bg} flex items-center justify-center`}>
-                <s.icon size={15} className={s.color} />
+              <p className="text-xs text-muted-foreground font-medium leading-tight">{s.label}</p>
+              <div className={`w-7 h-7 md:w-8 md:h-8 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
+                <s.icon size={14} className={s.color} />
               </div>
             </div>
-            <p className={`text-xl md:text-2xl font-bold font-display ${s.color}`}>{s.value}</p>
+            <p className={`text-lg md:text-2xl font-bold font-display ${s.color} truncate`}>{s.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
         {/* Left col */}
         <div className="lg:col-span-2 space-y-6">
           {/* AI Insights */}
@@ -113,14 +121,24 @@ const Dashboard = () => {
             <div className="flex items-center gap-2 mb-4">
               <Lightbulb size={16} className="text-primary" />
               <h2 className="font-display font-semibold">AI Insights</h2>
+              {insightsLoading && <span className="text-xs text-muted-foreground ml-auto animate-pulse">AI is thinking…</span>}
             </div>
             <div className="space-y-3">
-              {insights.map((ins, i) => (
-                <div key={i} className={`rounded-xl border p-3.5 ${insightColors[ins.type]}`}>
-                  <p className="text-xs font-bold mb-0.5">{ins.title}</p>
-                  <p className="text-xs leading-relaxed opacity-90">{ins.message}</p>
-                </div>
-              ))}
+              {insightsLoading && insights.length === 0 ? (
+                [1, 2, 3].map(i => (
+                  <div key={i} className="rounded-xl border p-3.5 bg-muted/30 animate-pulse">
+                    <div className="h-3 bg-muted rounded w-1/3 mb-2" />
+                    <div className="h-3 bg-muted rounded w-full" />
+                  </div>
+                ))
+              ) : (
+                insights.map((ins, i) => (
+                  <div key={i} className={`rounded-xl border p-3.5 ${insightColors[ins.type]}`}>
+                    <p className="text-xs font-bold mb-0.5">{ins.title}</p>
+                    <p className="text-xs leading-relaxed opacity-90">{ins.message}</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

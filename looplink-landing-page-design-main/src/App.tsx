@@ -15,6 +15,7 @@ import Onboarding from "./pages/Onboarding.tsx";
 import Analytics from "./pages/Analytics.tsx";
 import Coach from "./pages/Coach.tsx";
 import History from "./pages/History.tsx";
+import Chat from "./pages/Chat.tsx";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ const App = () => (
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/coach" element={<Coach />} />
               <Route path="/history" element={<History />} />
+              <Route path="/chat" element={<Chat />} />
               <Route path="/faq" element={<FAQ />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

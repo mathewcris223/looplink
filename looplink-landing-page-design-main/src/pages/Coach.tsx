@@ -28,12 +28,16 @@ const Coach = () => {
   if (authLoading || bizLoading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" /></div>;
   if (!user || !activeBusiness) return null;
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     setAnalyzing(true);
-    setTimeout(() => {
-      setReport(generateCoachReport(transactions, activeBusiness.type, activeBusiness.name));
+    try {
+      const result = await generateCoachReport(transactions, activeBusiness.type, activeBusiness.name);
+      setReport(result);
+    } catch {
+      // generateCoachReport has its own fallback, this shouldn't happen
+    } finally {
       setAnalyzing(false);
-    }, 1800);
+    }
   };
 
   const sections = report ? [
@@ -93,7 +97,7 @@ const Coach = () => {
             </Button>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-5">
+          <div className="grid sm:grid-cols-2 gap-4 md:gap-5">
             {sections.map(({ icon: Icon, title, items, color, bg }) => (
               <div key={title} className={`rounded-2xl border p-5 ${bg}`}>
                 <div className={`flex items-center gap-2 mb-3 ${color}`}>

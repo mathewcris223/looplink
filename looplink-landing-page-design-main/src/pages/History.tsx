@@ -40,18 +40,18 @@ const History = () => {
 
   return (
     <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness} onAddBusiness={() => navigate("/onboarding")}>
-      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
-        <div>
-          <h1 className="font-display text-2xl md:text-3xl font-bold mb-1">Transaction History</h1>
-          <p className="text-muted-foreground text-sm">{activeBusiness.name} · {transactions.length} records</p>
+      <div className="flex items-start justify-between mb-6 md:mb-8 gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h1 className="font-display text-xl md:text-2xl lg:text-3xl font-bold mb-1">Transaction History</h1>
+          <p className="text-muted-foreground text-xs md:text-sm">{activeBusiness.name} · {transactions.length} records</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Filter size={14} className="text-muted-foreground" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter size={14} className="text-muted-foreground shrink-0" />
           {(["all", "income", "expense"] as const).map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-all ${
+              className={`px-3 py-2 rounded-full text-xs font-medium capitalize transition-all min-h-[36px] ${
                 filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
               }`}
             >

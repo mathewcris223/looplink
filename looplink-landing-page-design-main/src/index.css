@@ -71,8 +71,14 @@
 
 @layer base {
   * { @apply border-border; }
-  body { @apply bg-background text-foreground font-sans antialiased; }
-  html { scroll-behavior: smooth; }
+  body { @apply bg-background text-foreground font-sans antialiased; overflow-x: hidden; }
+  html { scroll-behavior: smooth; overflow-x: hidden; }
+
+  /* Ensure all images and media are responsive */
+  img, video, svg { max-width: 100%; height: auto; }
+
+  /* Touch-friendly minimum tap targets */
+  button, a, [role="button"] { min-height: 44px; }
 }
 
 @layer utilities {

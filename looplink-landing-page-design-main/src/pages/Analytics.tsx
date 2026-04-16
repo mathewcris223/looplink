@@ -47,20 +47,20 @@ const Analytics = () => {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
         {[
           { label: "Total Income", value: `₦${income.toLocaleString()}`, color: "text-emerald-600" },
           { label: "Total Expenses", value: `₦${expenses.toLocaleString()}`, color: "text-red-500" },
           { label: "Net Profit", value: `${profit >= 0 ? "+" : ""}₦${profit.toLocaleString()}`, color: profit >= 0 ? "text-emerald-600" : "text-red-500" },
         ].map(s => (
           <div key={s.label} className="rounded-2xl border bg-card p-4 text-center">
-            <p className="text-xs text-muted-foreground mb-1">{s.label}</p>
-            <p className={`text-lg font-bold font-display ${s.color}`}>{s.value}</p>
+            <p className="text-xs text-muted-foreground mb-1 leading-tight">{s.label}</p>
+            <p className={`text-base md:text-lg font-bold font-display ${s.color} truncate`}>{s.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
         {/* Weekly trend */}
         <div className="rounded-2xl border bg-card p-5">
           <div className="flex items-center gap-2 mb-5">
