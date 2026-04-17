@@ -163,12 +163,6 @@ const EditItemModal = ({ item, onClose, onSuccess }: { item: InventoryItem; onCl
   const [editQty, setEditQty] = useState(initialQty);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  // Derive current pack count from total units
-  const currentPacks = sellInPieces && item.units_per_pack
-    ? Math.floor((item.quantity ?? 0) / item.units_per_pack) : null;
-  const currentLoose = sellInPieces && item.units_per_pack
-    ? (item.quantity ?? 0) % item.units_per_pack : null;
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -225,25 +219,25 @@ const EditItemModal = ({ item, onClose, onSuccess }: { item: InventoryItem; onCl
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
         </div>
 
-        {/* Editable quantity field */}
-        <div>
-          <label className="text-sm font-medium">
-            {sellInPieces ? "Number of packs in stock" : "Quantity in stock"}
-          </label>
-          <input
-            type="number" min="0"
-            className="w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 mt-1.5"
-            value={editQty}
-            onChange={e => setEditQty(e.target.value)}
-          />
-          {sellInPieces && unitsPerPack && parseInt(unitsPerPack) >= 2 && editQty && (
-            <p className="text-xs text-muted-foreground mt-1">
-              = {parseInt(editQty) * parseInt(unitsPerPack)} {unitName} total
-            </p>
-          )}
-        </div>
-
         <form onSubmit={handleSave} className="space-y-4">
+          {/* Quantity — inside form so it saves */}
+          <div>
+            <label className="text-sm font-medium">
+              {sellInPieces ? "Number of packs in stock" : "Quantity in stock"}
+            </label>
+            <input
+              type="number" min="0"
+              className="w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 mt-1.5"
+              value={editQty}
+              onChange={e => setEditQty(e.target.value)}
+            />
+            {sellInPieces && unitsPerPack && parseInt(unitsPerPack) >= 2 && editQty && (
+              <p className="text-xs text-muted-foreground mt-1">
+                = {parseInt(editQty) * parseInt(unitsPerPack)} {unitName} total
+              </p>
+            )}
+          </div>
+
           <div>
             <label className="text-sm font-medium">Item Name</label>
             <input className={`${inputCls} mt-1.5`} value={name} onChange={e => setName(e.target.value)} />

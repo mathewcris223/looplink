@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "Auto Build Check",
+  "description": "Runs a TypeScript type check after every file edit to catch errors before they break the dev server.",
+  "version": "1",
+  "when": {
+    "type": "postToolUse",
+    "toolTypes": [
+      "write"
+    ]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd looplink-landing-page-design-main && npx tsc --noEmit 2>&1 | tail -20",
+    "timeout": 30
+  }
+}
