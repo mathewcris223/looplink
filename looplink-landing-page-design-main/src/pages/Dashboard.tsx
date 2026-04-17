@@ -8,7 +8,7 @@ import AppShell from "@/components/dashboard/AppShell";
 import AddTransactionModal from "@/components/dashboard/AddTransactionModal";
 import { getTransactions, Transaction } from "@/lib/db";
 import { calcHealthScore, generateInsights, AIInsight } from "@/lib/ai";
-import { TrendingUp, TrendingDown, Plus, Lightbulb, Activity, ArrowUpRight, ArrowDownRight, BarChart3, MessageSquare, Package } from "lucide-react";
+import { TrendingUp, TrendingDown, Plus, Lightbulb, Activity, ArrowUpRight, ArrowDownRight, BarChart3, MessageSquare, Package, AlertTriangle } from "lucide-react";
 
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
@@ -114,7 +114,7 @@ const Dashboard = () => {
                 <s.icon size={16} className={s.color} />
               </div>
             </div>
-            <p className={`text-xl md:text-2xl font-bold font-display ${s.color} truncate`}>{s.value}</p>
+            <p className={`text-xl md:text-2xl font-bold font-display ${s.color} break-all leading-tight`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -245,41 +245,46 @@ const Dashboard = () => {
           </div>
 
           {/* Inventory summary — always visible */}
-          {inventoryItems.length > 0 && (
-            <div className="rounded-2xl border bg-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Package size={16} className="text-primary" />
-                  <h2 className="font-display font-semibold">Inventory</h2>
-                </div>
-                <button onClick={() => navigate("/inventory")} className="text-xs text-primary hover:underline">View all</button>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Total items</span>
-                  <span className="font-semibold">{inventoryItems.length}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Stock value</span>
-                  <span className="font-semibold text-emerald-600">
-                    ₦{inventoryItems.filter(i => i.item_type !== "service").reduce((s, i) => s + (i.quantity ?? 0) * (i.cost_price ?? 0), 0).toLocaleString()}
-                  </span>
-                </div>
-                {inventoryItems.filter(i => i.status === "low_stock").length > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-amber-600">Low stock</span>
-                    <span className="font-semibold text-amber-600">{inventoryItems.filter(i => i.status === "low_stock").length} items</span>
+          {inventoryItems.length > 0 && (() => {
+            const stockValue = inventoryItems.filter(i => i.item_type !== "service").reduce((s, i) => s + (i.quantity ?? 0) * (i.cost_price ?? 0), 0);
+            const lowCount = inventoryItems.filter(i => i.status === "low_stock").length;
+            const outCount = inventoryItems.filter(i => i.status === "out_of_stock").length;
+            // Best seller = item with highest selling price × quantity (proxy for value)
+            const bestSeller = [...inventoryItems].sort((a, b) => (b.selling_price * (b.quantity ?? 0)) - (a.selling_price * (a.quantity ?? 0)))[0];
+            return (
+              <div className="rounded-2xl border bg-card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Package size={16} className="text-primary" />
+                    <h2 className="font-display font-semibold">Inventory</h2>
                   </div>
-                )}
-                {inventoryItems.filter(i => i.status === "out_of_stock").length > 0 && (
+                  <button onClick={() => navigate("/inventory")} className="text-xs text-primary hover:underline">Manage →</button>
+                </div>
+                <div className="space-y-2.5">
                   <div className="flex justify-between text-sm">
-                    <span className="text-red-600">Out of stock</span>
-                    <span className="font-semibold text-red-600">{inventoryItems.filter(i => i.status === "out_of_stock").length} items</span>
+                    <span className="text-muted-foreground">Stock value</span>
+                    <span className="font-bold text-emerald-600">₦{stockValue.toLocaleString()}</span>
                   </div>
-                )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total items</span>
+                    <span className="font-semibold">{inventoryItems.length}</span>
+                  </div>
+                  {bestSeller && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Top item</span>
+                      <span className="font-semibold truncate max-w-[120px]">{bestSeller.name}</span>
+                    </div>
+                  )}
+                  {(lowCount > 0 || outCount > 0) && (
+                    <div className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl mt-1 ${outCount > 0 ? "bg-red-50 text-red-600 border border-red-200" : "bg-amber-50 text-amber-600 border border-amber-200"}`}>
+                      <AlertTriangle size={12} />
+                      {outCount > 0 ? `${outCount} item${outCount > 1 ? "s" : ""} out of stock` : `${lowCount} item${lowCount > 1 ? "s" : ""} running low`}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
 

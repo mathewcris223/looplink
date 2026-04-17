@@ -91,19 +91,49 @@
 @layer base {
   * { @apply border-border; }
 
-  html { scroll-behavior: smooth; overflow-x: hidden; }
+  html {
+    scroll-behavior: smooth;
+    overflow-x: clip;
+    /* Prevent iOS text size inflation */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
 
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
-    overflow-x: hidden;
+    overflow-x: clip;
     -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+    width: 100%;
   }
 
-  /* Touch-friendly tap targets */
-  button, a, [role="button"] { min-height: 44px; }
+  /* CRITICAL: iOS zooms in when input font-size < 16px — force 16px on mobile */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
 
-  img, video { max-width: 100%; height: auto; }
+  /* On larger screens, allow smaller font */
+  @media (min-width: 768px) {
+    input, textarea, select {
+      font-size: 0.875rem !important;
+    }
+  }
+
+  /* Touch-friendly tap targets — only interactive controls, not all links */
+  button:not([data-no-touch]),
+  [role="button"],
+  input[type="submit"],
+  input[type="button"] {
+    min-height: 44px;
+  }
+
+  a.btn, a[role="button"] { min-height: 44px; }
+
+  img, video, svg { max-width: 100%; height: auto; }
+
+  /* Prevent any element from causing horizontal scroll */
+  *:not(html):not(body):not(#root) { box-sizing: border-box; }
 }
 
 /* ── Utility Classes ─────────────────────────────────────────────────────── */

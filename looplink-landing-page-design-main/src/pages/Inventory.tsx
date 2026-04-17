@@ -9,7 +9,7 @@ import AddProductModal from "@/components/inventory/AddProductModal";
 import RecordSaleModal from "@/components/inventory/RecordSaleModal";
 import { InventoryItem, deriveStockStatus } from "@/lib/db";
 import { supabase } from "@/lib/supabase";
-import { Package, Plus, ShoppingCart, AlertTriangle, X } from "lucide-react";
+import { Package, Plus, ShoppingCart, AlertTriangle, X, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Modal = "add" | "sale" | "edit" | null;
@@ -67,26 +67,25 @@ const Inventory = () => {
       </div>
 
       {/* Summary row */}
-      {inventoryItems.length > 0 && (
-        <div className="flex gap-3 mb-6 flex-wrap">
-          <div className="rounded-2xl border bg-card px-4 py-3 flex items-center gap-2">
-            <Package size={15} className="text-blue-600" />
-            <span className="text-sm font-semibold">{inventoryItems.length} items</span>
+      {inventoryItems.length > 0 && (() => {
+        const totalValue = inventoryItems.reduce((s, i) => s + (i.quantity ?? 0) * (i.cost_price ?? 0), 0);
+        const totalQty = inventoryItems.reduce((s, i) => s + (i.quantity ?? 0), 0);
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {[
+              { label: "Total Items", value: String(inventoryItems.length), color: "text-blue-600", bg: "bg-blue-50" },
+              { label: "Total Stock", value: String(totalQty), color: "text-purple-600", bg: "bg-purple-50" },
+              { label: "Stock Value", value: `₦${totalValue.toLocaleString()}`, color: "text-emerald-600", bg: "bg-emerald-50" },
+              { label: "Low / Out", value: `${lowStockCount + outOfStockCount}`, color: lowStockCount + outOfStockCount > 0 ? "text-amber-600" : "text-muted-foreground", bg: lowStockCount + outOfStockCount > 0 ? "bg-amber-50" : "bg-muted/40" },
+            ].map(s => (
+              <div key={s.label} className="rounded-2xl border bg-card px-4 py-3">
+                <p className="text-xs text-muted-foreground mb-1">{s.label}</p>
+                <p className={`text-base font-bold font-display ${s.color}`}>{s.value}</p>
+              </div>
+            ))}
           </div>
-          {lowStockCount > 0 && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-2">
-              <AlertTriangle size={15} className="text-amber-600" />
-              <span className="text-sm font-semibold text-amber-700">{lowStockCount} running low</span>
-            </div>
-          )}
-          {outOfStockCount > 0 && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 flex items-center gap-2">
-              <AlertTriangle size={15} className="text-red-600" />
-              <span className="text-sm font-semibold text-red-700">{outOfStockCount} out of stock</span>
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* Loading */}
       {loading && (
@@ -148,29 +147,62 @@ const Inventory = () => {
   );
 };
 
-// Inline edit modal — simple, same fields as add
+// Full edit modal — shows all fields including pack/piece config
 const EditItemModal = ({ item, onClose, onSuccess }: { item: InventoryItem; onClose: () => void; onSuccess: () => void }) => {
   const [name, setName] = useState(item.name);
-  const [quantity, setQuantity] = useState(String(item.quantity ?? 0));
   const [costPrice, setCostPrice] = useState(String(item.cost_price ?? ""));
   const [sellingPrice, setSellingPrice] = useState(String(item.selling_price));
+  const [sellInPieces, setSellInPieces] = useState(item.purchase_type === "pack" && (item.units_per_pack ?? 0) > 1);
+  const [unitsPerPack, setUnitsPerPack] = useState(String(item.units_per_pack ?? ""));
+  const [unitName, setUnitName] = useState(item.unit_name ?? "pieces");
+  const [pieceSellingPrice, setPieceSellingPrice] = useState(String(item.unit_selling_price ?? ""));
+  // Editable quantity — stored as packs for pack items, raw units otherwise
+  const initialQty = sellInPieces && item.units_per_pack
+    ? String(Math.floor((item.quantity ?? 0) / item.units_per_pack))
+    : String(item.quantity ?? 0);
+  const [editQty, setEditQty] = useState(initialQty);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Derive current pack count from total units
+  const currentPacks = sellInPieces && item.units_per_pack
+    ? Math.floor((item.quantity ?? 0) / item.units_per_pack) : null;
+  const currentLoose = sellInPieces && item.units_per_pack
+    ? (item.quantity ?? 0) % item.units_per_pack : null;
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!name.trim()) { setError("Enter an item name."); return; }
     if (!sellingPrice || parseFloat(sellingPrice) < 0) { setError("Enter a selling price."); return; }
+    if (sellInPieces && (!unitsPerPack || parseInt(unitsPerPack) < 2)) {
+      setError("Enter how many pieces per pack (at least 2)."); return;
+    }
+    if (sellInPieces && (!pieceSellingPrice || parseFloat(pieceSellingPrice) < 0)) {
+      setError("Enter the selling price per piece."); return;
+    }
     setLoading(true);
     try {
-      const newQty = parseInt(quantity) || 0;
-      const newStatus = deriveStockStatus({ item_type: item.item_type, quantity: newQty, low_stock_threshold: item.low_stock_threshold ?? 5 });
+      const uPP = sellInPieces ? parseInt(unitsPerPack) : 1;
+      // Convert packs back to total units for storage
+      const newQty = sellInPieces ? (parseInt(editQty) || 0) * uPP : (parseInt(editQty) || 0);
+      const newStatus = deriveStockStatus({
+        item_type: item.item_type,
+        quantity: newQty,
+        low_stock_threshold: sellInPieces ? uPP : 5,
+      });
       await supabase.from("inventory_items").update({
         name: name.trim(),
         quantity: newQty,
         cost_price: costPrice ? parseFloat(costPrice) : null,
         selling_price: parseFloat(sellingPrice),
+        purchase_type: sellInPieces ? "pack" : "single",
+        units_per_pack: sellInPieces ? uPP : null,
+        unit_name: sellInPieces ? unitName : null,
+        pack_name: sellInPieces ? "pack" : null,
+        unit_selling_price: sellInPieces ? parseFloat(pieceSellingPrice) : null,
+        pack_selling_price: sellInPieces ? parseFloat(sellingPrice) : null,
+        pack_cost: costPrice ? parseFloat(costPrice) : null,
+        low_stock_threshold: sellInPieces ? uPP : 5,
         status: newStatus,
       }).eq("id", item.id);
       onSuccess();
@@ -187,30 +219,88 @@ const EditItemModal = ({ item, onClose, onSuccess }: { item: InventoryItem; onCl
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm rounded-3xl border bg-card shadow-2xl p-6 animate-fade-up">
+      <div className="relative w-full max-w-sm rounded-3xl border bg-card shadow-2xl p-6 animate-fade-up max-h-[92dvh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-display font-bold text-lg">Edit Item</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
         </div>
+
+        {/* Editable quantity field */}
+        <div>
+          <label className="text-sm font-medium">
+            {sellInPieces ? "Number of packs in stock" : "Quantity in stock"}
+          </label>
+          <input
+            type="number" min="0"
+            className="w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 mt-1.5"
+            value={editQty}
+            onChange={e => setEditQty(e.target.value)}
+          />
+          {sellInPieces && unitsPerPack && parseInt(unitsPerPack) >= 2 && editQty && (
+            <p className="text-xs text-muted-foreground mt-1">
+              = {parseInt(editQty) * parseInt(unitsPerPack)} {unitName} total
+            </p>
+          )}
+        </div>
+
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="text-sm font-medium">Item Name</label>
             <input className={`${inputCls} mt-1.5`} value={name} onChange={e => setName(e.target.value)} />
           </div>
-          <div>
-            <label className="text-sm font-medium">Quantity</label>
-            <input type="number" min="0" className={`${inputCls} mt-1.5`} value={quantity} onChange={e => setQuantity(e.target.value)} />
-          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium">Cost Price (₦)</label>
-              <input type="number" min="0" className={`${inputCls} mt-1.5`} value={costPrice} onChange={e => setCostPrice(e.target.value)} />
+              <label className="text-sm font-medium">{sellInPieces ? "Cost per pack (₦)" : "Cost Price (₦)"}</label>
+              <input type="number" min="0" className={`${inputCls} mt-1.5`} placeholder="What you paid"
+                value={costPrice} onChange={e => setCostPrice(e.target.value)} />
             </div>
             <div>
-              <label className="text-sm font-medium">Selling Price (₦)</label>
-              <input type="number" min="0" className={`${inputCls} mt-1.5`} value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} />
+              <label className="text-sm font-medium">{sellInPieces ? "Pack selling price (₦)" : "Selling Price (₦)"}</label>
+              <input type="number" min="0" className={`${inputCls} mt-1.5`} placeholder="What you charge"
+                value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} />
             </div>
           </div>
+
+          {/* Pack/piece section */}
+          <div className="rounded-2xl border bg-muted/30 p-4">
+            <button type="button" onClick={() => setSellInPieces(!sellInPieces)}
+              className="w-full flex items-center justify-between text-sm font-medium">
+              <span>Sell in smaller units? <span className="text-xs text-muted-foreground font-normal">(optional)</span></span>
+              <ChevronDown size={16} className={`text-muted-foreground transition-transform ${sellInPieces ? "rotate-180" : ""}`} />
+            </button>
+
+            {sellInPieces && (
+              <div className="mt-3 space-y-3 pt-3 border-t">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium">Units per pack</label>
+                    <input type="number" min="2" className={`${inputCls} mt-1 text-sm py-2`} placeholder="e.g. 24"
+                      value={unitsPerPack} onChange={e => setUnitsPerPack(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">Unit name</label>
+                    <input className={`${inputCls} mt-1 text-sm py-2`} placeholder="e.g. bottle"
+                      value={unitName} onChange={e => setUnitName(e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium">Selling price per {unitName || "piece"} (₦)</label>
+                  <input type="number" min="0" step="0.01" className={`${inputCls} mt-1 text-sm py-2`}
+                    placeholder="e.g. 200"
+                    value={pieceSellingPrice} onChange={e => setPieceSellingPrice(e.target.value)} />
+                  <p className="text-[10px] text-muted-foreground mt-1">Set independently — not auto-calculated</p>
+                </div>
+                {unitsPerPack && parseInt(unitsPerPack) >= 2 && pieceSellingPrice && (
+                  <div className="rounded-xl bg-primary/8 border border-primary/20 px-3 py-2 text-xs">
+                    <p className="font-semibold text-primary">1 pack = {unitsPerPack} {unitName}</p>
+                    <p className="text-muted-foreground">Pack: ₦{parseFloat(sellingPrice || "0").toLocaleString()} · Per {unitName}: ₦{parseFloat(pieceSellingPrice).toLocaleString()}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
           <Button type="submit" variant="hero" size="lg" disabled={loading} className="w-full rounded-xl">
             {loading ? "Saving..." : "Save Changes"}

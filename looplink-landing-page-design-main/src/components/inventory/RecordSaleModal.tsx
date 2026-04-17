@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { recordInventorySaleV2, InventoryItem } from "@/lib/db";
+import { recordInventorySaleV2, InventoryItem, SaleMode, calcCostPerUnit } from "@/lib/db";
 import { X, Search } from "lucide-react";
 import VoiceMicButton from "@/components/ui/VoiceMicButton";
 import QuickVoiceEntry from "@/components/ui/QuickVoiceEntry";
@@ -19,6 +19,7 @@ interface Props {
 const RecordSaleModal = ({ businessId, items, onClose, onSuccess, defaultItem }: Props) => {
   const [search, setSearch] = useState(defaultItem?.name ?? "");
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(defaultItem ?? null);
+  const [saleMode, setSaleMode] = useState<SaleMode>("unit");
   const [quantity, setQuantity] = useState("1");
   const [salePrice, setSalePrice] = useState(defaultItem ? String(defaultItem.selling_price) : "");
   const [loading, setLoading] = useState(false);
@@ -30,21 +31,55 @@ const RecordSaleModal = ({ businessId, items, onClose, onSuccess, defaultItem }:
     [items, search]
   );
 
+  const isPackItem = selectedItem?.purchase_type === "pack" && (selectedItem?.units_per_pack ?? 0) > 1;
+
   const selectItem = (item: InventoryItem) => {
-    setSelectedItem(item); setSearch(item.name); setShowDropdown(false);
-    setSalePrice(String(item.selling_price)); setQuantity("1");
+    setSelectedItem(item);
+    setSearch(item.name);
+    setShowDropdown(false);
+    setQuantity("1");
+    // Default to pack mode if item has packs
+    const isPack = item.purchase_type === "pack" && (item.units_per_pack ?? 0) > 1;
+    setSaleMode(isPack ? "pack" : "unit");
+    setSalePrice(String(isPack ? (item.pack_selling_price ?? item.selling_price) : item.selling_price));
   };
 
   const qty = parseInt(quantity) || 0;
   const price = parseFloat(salePrice) || 0;
-  const profit = selectedItem && qty && price ? qty * (price - (selectedItem.cost_price ?? 0)) : null;
 
-  // Quick voice fills multiple fields at once
+  // Calculate profit based on mode
+  const profit = useMemo(() => {
+    if (!selectedItem || !qty || !price) return null;
+    if (isPackItem && saleMode === "pack") {
+      return qty * (price - (selectedItem.pack_cost ?? selectedItem.cost_price ?? 0));
+    }
+    if (isPackItem && saleMode === "unit") {
+      const cpu = calcCostPerUnit(selectedItem.pack_cost ?? 0, selectedItem.units_per_pack ?? 1);
+      return qty * ((selectedItem.unit_selling_price ?? price) - cpu);
+    }
+    return qty * (price - (selectedItem.cost_price ?? 0));
+  }, [selectedItem, qty, price, saleMode, isPackItem]);
+
+  // Stock info display
+  const stockInfo = useMemo(() => {
+    if (!selectedItem) return null;
+    const totalUnits = selectedItem.quantity ?? 0;
+    if (isPackItem && selectedItem.units_per_pack) {
+      const packs = Math.floor(totalUnits / selectedItem.units_per_pack);
+      const loose = totalUnits % selectedItem.units_per_pack;
+      const packName = selectedItem.pack_name ?? "packs";
+      const unitName = selectedItem.unit_name ?? "pieces";
+      if (packs > 0 && loose > 0) return `${packs} ${packName} + ${loose} ${unitName} in stock`;
+      if (packs > 0) return `${packs} ${packName} in stock`;
+      return `${loose} ${unitName} in stock`;
+    }
+    return `${totalUnits} in stock`;
+  }, [selectedItem, isPackItem]);
+
   const handleVoiceFields = ({ itemName, quantity: q, amount }: { itemName?: string; quantity?: number; amount?: number }) => {
     if (itemName) {
       setSearch(itemName);
       setShowDropdown(true);
-      // Try to match with existing inventory
       const match = items.find(i => i.name.toLowerCase().includes(itemName.toLowerCase()));
       if (match) { selectItem(match); return; }
     }
@@ -52,7 +87,6 @@ const RecordSaleModal = ({ businessId, items, onClose, onSuccess, defaultItem }:
     if (amount) setSalePrice(String(amount));
   };
 
-  // Image scan fills fields from receipt
   const handleScanResult = (data: ScannedData) => {
     if (data.itemName) {
       setSearch(data.itemName);
@@ -68,15 +102,36 @@ const RecordSaleModal = ({ businessId, items, onClose, onSuccess, defaultItem }:
     setError("");
     if (!qty || qty < 1) { setError("Enter how many you sold."); return; }
     if (!price || price < 0) { setError("Enter the selling price."); return; }
+
+    // Validate stock
+    if (selectedItem && selectedItem.item_type !== "service") {
+      const totalUnits = selectedItem.quantity ?? 0;
+      const unitsNeeded = isPackItem && saleMode === "pack"
+        ? qty * (selectedItem.units_per_pack ?? 1)
+        : qty;
+      if (unitsNeeded > totalUnits) {
+        setError(`Not enough stock. Only ${stockInfo}.`);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
+      const packsSold = isPackItem && saleMode === "pack" ? qty : undefined;
+      const unitsSold = isPackItem && saleMode === "unit" ? qty : undefined;
+      const actualQty = isPackItem && saleMode === "pack" && selectedItem?.units_per_pack
+        ? qty * selectedItem.units_per_pack : qty;
+
       await recordInventorySaleV2({
         itemId: selectedItem?.id ?? null,
         businessId,
-        quantitySold: qty,
+        quantitySold: actualQty,
         salePricePerUnit: price,
         profit: profit ?? undefined,
         itemType: selectedItem?.item_type ?? "product",
+        saleMode: isPackItem ? saleMode : undefined,
+        unitsSold,
+        packsSold,
         itemName: selectedItem?.name ?? (search.trim() || undefined),
       });
       onSuccess();
@@ -131,9 +186,44 @@ const RecordSaleModal = ({ businessId, items, onClose, onSuccess, defaultItem }:
             )}
           </div>
 
+          {/* Stock info */}
+          {stockInfo && (
+            <p className="text-xs text-muted-foreground -mt-1">{stockInfo}</p>
+          )}
+
+          {/* Pack / Piece toggle — only shown when item has pack config */}
+          {isPackItem && selectedItem && (
+            <div>
+              <label className="text-sm font-medium mb-2 block">Sell as</label>
+              <div className="flex rounded-xl bg-muted p-1">
+                <button type="button" onClick={() => {
+                  setSaleMode("pack");
+                  setSalePrice(String(selectedItem.pack_selling_price ?? selectedItem.selling_price));
+                }}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${saleMode === "pack" ? "bg-card shadow-sm" : "text-muted-foreground"}`}>
+                  Full {selectedItem.pack_name ?? "Pack"}
+                </button>
+                <button type="button" onClick={() => {
+                  setSaleMode("unit");
+                  setSalePrice(String(selectedItem.unit_selling_price ?? (selectedItem.selling_price / (selectedItem.units_per_pack ?? 1))));
+                }}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${saleMode === "unit" ? "bg-card shadow-sm" : "text-muted-foreground"}`}>
+                  Per {selectedItem.unit_name ?? "Piece"}
+                </button>
+              </div>
+              {saleMode === "unit" && selectedItem.units_per_pack && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  1 {selectedItem.pack_name ?? "pack"} = {selectedItem.units_per_pack} {selectedItem.unit_name ?? "pieces"}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium">How many sold?</label>
+              <label className="text-sm font-medium">
+                {isPackItem && saleMode === "pack" ? "Packs sold" : isPackItem ? `${selectedItem?.unit_name ?? "Pieces"} sold` : "How many sold?"}
+              </label>
               <div className="relative mt-1.5">
                 <input type="number" min="1" className={`${inputCls} pr-9`}
                   value={quantity} onChange={e => setQuantity(e.target.value)} />
@@ -143,7 +233,7 @@ const RecordSaleModal = ({ businessId, items, onClose, onSuccess, defaultItem }:
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Price each (₦)</label>
+              <label className="text-sm font-medium">Price (₦)</label>
               <div className="relative mt-1.5">
                 <input type="number" min="0" step="0.01" className={`${inputCls} pr-9`}
                   value={salePrice} onChange={e => setSalePrice(e.target.value)} />

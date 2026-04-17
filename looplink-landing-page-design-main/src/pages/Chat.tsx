@@ -42,8 +42,42 @@ const Chat = () => {
   const [listening, setListening] = useState(false);
   const [chipMap, setChipMap] = useState<Map<number, string[]>>(new Map());
 
-  const CHIP_PROMPT = `Based on your last response, suggest 2-4 short follow-up questions or actions the user might want. Return ONLY a JSON array of strings, max 8 words each. Always include at least one of: "Give me a step-by-step plan", "Analyze my performance", "Suggest business ideas".`;
-  const FALLBACK_CHIPS = ["Give me a step-by-step plan", "Analyze my performance", "Suggest business ideas"];
+  const generateChips = async (msgIndex: number, userQuestion: string, aiResponse: string) => {
+    try {
+      const raw = await aiRequest({
+        message: `The user asked: "${userQuestion.slice(0, 200)}"
+Your response was: "${aiResponse.slice(0, 400)}"
+
+Generate 3 short follow-up questions the user would naturally want to ask next, based specifically on this conversation. Return ONLY a JSON array of 3 strings. Each string must be under 10 words, specific to this topic, and different from the user's original question. Do not use generic phrases like "Tell me more" or "What should I do next". Make them feel like a natural continuation of this exact conversation.`,
+        businessType: activeBusiness.type,
+        businessName: activeBusiness.name,
+        mode: "chat",
+      });
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (match) {
+        const chips = JSON.parse(match[0]) as string[];
+        if (Array.isArray(chips) && chips.length >= 2) {
+          setChipMap(prev => new Map(prev).set(msgIndex, chips.slice(0, 4)));
+          return;
+        }
+      }
+    } catch { /* silent */ }
+    // Fallback — derive from the user's question topic rather than static chips
+    const q = userQuestion.toLowerCase();
+    let fallback: string[];
+    if (q.includes("expens") || q.includes("cost") || q.includes("spend")) {
+      fallback = ["Which expense is the highest?", "How do I reduce this cost?", "Show me a budget plan"];
+    } else if (q.includes("profit") || q.includes("income") || q.includes("revenue")) {
+      fallback = ["How can I increase this further?", "What's affecting my profit margin?", "Compare this to last month"];
+    } else if (q.includes("stock") || q.includes("inventory") || q.includes("product")) {
+      fallback = ["Which product sells the most?", "When should I restock?", "How do I price this better?"];
+    } else if (q.includes("grow") || q.includes("scale") || q.includes("expand")) {
+      fallback = ["What's the first step?", "How much capital do I need?", "What are the risks?"];
+    } else {
+      fallback = ["Give me a step-by-step plan", "What are the risks?", "How do I start?"];
+    }
+    setChipMap(prev => new Map(prev).set(msgIndex, fallback));
+  };
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -79,26 +113,6 @@ const Chat = () => {
   const income = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expenses = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const profit = income - expenses;
-
-  const generateChips = async (msgIndex: number, lastResponse: string) => {
-    try {
-      const raw = await aiRequest({
-        message: CHIP_PROMPT + `\n\nYour last response was: "${lastResponse.slice(0, 300)}"`,
-        businessType: activeBusiness.type,
-        businessName: activeBusiness.name,
-        mode: "chat",
-      });
-      const match = raw.match(/\[[\s\S]*\]/);
-      if (match) {
-        const chips = JSON.parse(match[0]) as string[];
-        if (Array.isArray(chips) && chips.length >= 2) {
-          setChipMap(prev => new Map(prev).set(msgIndex, chips.slice(0, 4)));
-          return;
-        }
-      }
-    } catch { /* silent */ }
-    setChipMap(prev => new Map(prev).set(msgIndex, FALLBACK_CHIPS));
-  };
 
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
@@ -165,7 +179,7 @@ const Chat = () => {
       setStreaming(false);
       abortRef.current = null;
       const assistantMsgIndex = updatedHistory.length; // index of the assistant message
-      generateChips(assistantMsgIndex, full);
+      generateChips(assistantMsgIndex, trimmed, full);
       return;
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortError") return;
