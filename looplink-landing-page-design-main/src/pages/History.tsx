@@ -49,7 +49,7 @@ const History = () => {
   });
 
   return (
-    <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness} onAddBusiness={() => navigate("/onboarding")}>
+    <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness}>
       <div className="flex items-start justify-between mb-6 md:mb-8 gap-3 flex-wrap">
         <div className="min-w-0">
           <h1 className="font-display text-xl md:text-2xl lg:text-3xl font-bold mb-1">Transaction History</h1>

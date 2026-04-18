@@ -78,7 +78,6 @@ const Dashboard = () => {
       businesses={businesses}
       activeBusiness={activeBusiness}
       onSelectBusiness={setActiveBusiness}
-      onAddBusiness={() => navigate("/onboarding")}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">

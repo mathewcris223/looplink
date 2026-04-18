@@ -49,7 +49,7 @@ const Inventory = () => {
   const outOfStockCount = inventoryItems.filter(i => i.status === "out_of_stock").length;
 
   return (
-    <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness} onAddBusiness={() => navigate("/onboarding")}>
+    <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness}>
       {/* Header */}
       <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
         <div>

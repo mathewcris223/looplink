@@ -11,7 +11,7 @@
   },
   "then": {
     "type": "runCommand",
-    "command": "cd looplink-landing-page-design-main && npx tsc --noEmit 2>&1 | tail -20",
-    "timeout": 30
+    "command": "cd looplink-landing-page-design-main && npx tsc --noEmit",
+    "timeout": 60
   }
 }

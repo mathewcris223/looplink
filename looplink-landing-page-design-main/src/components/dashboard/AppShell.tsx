@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useBusiness } from "@/context/BusinessContext";
+import AddBusinessModal from "@/components/dashboard/AddBusinessModal";
 import {
   LayoutDashboard, BarChart3, Brain, History,
   LogOut, Menu, X, ChevronDown, Plus, Building2, MessageSquare, Package, Zap
@@ -12,7 +14,6 @@ interface AppShellProps {
   businesses: Business[];
   activeBusiness: Business | null;
   onSelectBusiness: (b: Business) => void;
-  onAddBusiness: () => void;
 }
 
 const navItems = [
@@ -24,12 +25,14 @@ const navItems = [
   { path: "/history", icon: History, label: "History" },
 ];
 
-const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness, onAddBusiness }: AppShellProps) => {
+const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: AppShellProps) => {
   const { user, logout } = useAuth();
+  const { refreshBusinesses } = useBusiness();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [bizDropdown, setBizDropdown] = useState(false);
+  const [showAddBiz, setShowAddBiz] = useState(false);
 
   const handleLogout = async () => { await logout(); navigate("/"); };
 
@@ -71,7 +74,7 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness, onAd
                 <span className="truncate">{b.name}</span>
               </button>
             ))}
-            <button onClick={() => { onAddBusiness(); setBizDropdown(false); }}
+            <button onClick={() => { setShowAddBiz(true); setBizDropdown(false); }}
               className="w-full text-left px-3 py-2.5 text-sm text-[hsl(var(--sidebar-primary))] hover:bg-white/8 transition-colors flex items-center gap-2 border-t border-white/8 min-h-[40px]">
               <Plus size={12} /> Add business
             </button>
@@ -157,6 +160,17 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness, onAd
           {children}
         </main>
       </div>
+
+      {/* Add Business Modal */}
+      {showAddBiz && (
+        <AddBusinessModal
+          onClose={() => setShowAddBiz(false)}
+          onCreated={async () => {
+            await refreshBusinesses();
+            setShowAddBiz(false);
+          }}
+        />
+      )}
     </div>
   );
 };

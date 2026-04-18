@@ -49,7 +49,7 @@ const Coach = () => {
   ] : [];
 
   return (
-    <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness} onAddBusiness={() => navigate("/onboarding")}>
+    <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness}>
       <div className="mb-8">
         <h1 className="font-display text-2xl md:text-3xl font-bold mb-1">AI Business Coach</h1>
         <p className="text-muted-foreground text-sm">{activeBusiness.name} · Powered by LoopLink AI</p>

@@ -55,7 +55,7 @@ const Analytics = () => {
 
   return (
     <AppShell businesses={businesses} activeBusiness={activeBusiness}
-      onSelectBusiness={setActiveBusiness} onAddBusiness={() => navigate("/onboarding")}>
+      onSelectBusiness={setActiveBusiness}>
 
       <div className="mb-6">
         <h1 className="font-display text-2xl md:text-3xl font-bold mb-1">Analytics</h1>
