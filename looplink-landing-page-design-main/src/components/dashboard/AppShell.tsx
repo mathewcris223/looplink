@@ -3,11 +3,13 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
 import AddBusinessModal from "@/components/dashboard/AddBusinessModal";
+import BulkInputModal from "@/components/dashboard/BulkInputModal";
 import {
   LayoutDashboard, BarChart3, Brain, History,
-  LogOut, Menu, X, ChevronDown, Plus, Building2, MessageSquare, Package, Zap
+  LogOut, Menu, X, ChevronDown, Plus, Building2, MessageSquare, Package, Zap, MoreHorizontal
 } from "lucide-react";
 import { Business } from "@/lib/db";
+import { useInventory } from "@/context/InventoryContext";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -33,6 +35,8 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [bizDropdown, setBizDropdown] = useState(false);
   const [showAddBiz, setShowAddBiz] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showMoreSheet, setShowMoreSheet] = useState(false);
 
   const handleLogout = async () => { await logout(); navigate("/"); };
 
@@ -156,9 +160,108 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
           <div className="w-10" />
         </header>
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto overflow-x-hidden">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto overflow-x-hidden pb-28 md:pb-0">
           {children}
         </main>
+
+        {/* Bottom Nav — mobile only, always visible */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border/60 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+          <div className="flex items-center justify-around px-1 pt-1 pb-1.5">
+
+            {/* Home */}
+            <Link to="/dashboard"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[56px] min-h-[52px] justify-center ${
+                location.pathname === "/dashboard"
+                  ? "text-primary bg-primary/10"
+                  : "text-muted-foreground active:bg-muted"
+              }`}>
+              <LayoutDashboard size={22} strokeWidth={location.pathname === "/dashboard" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold tracking-tight">Home</span>
+            </Link>
+
+            {/* Inventory */}
+            <Link to="/inventory"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[56px] min-h-[52px] justify-center ${
+                location.pathname === "/inventory"
+                  ? "text-primary bg-primary/10"
+                  : "text-muted-foreground active:bg-muted"
+              }`}>
+              <Package size={22} strokeWidth={location.pathname === "/inventory" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold tracking-tight">Inventory</span>
+            </Link>
+
+            {/* Center Add button — prominent */}
+            <button onClick={() => setShowBulkModal(true)}
+              className="flex flex-col items-center gap-0.5 -mt-4 min-w-[56px] min-h-[56px] justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-brand flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform">
+                <Plus size={26} className="text-white" strokeWidth={2.5} />
+              </div>
+              <span className="text-[10px] font-semibold tracking-tight text-muted-foreground mt-0.5">Add</span>
+            </button>
+
+            {/* Chat */}
+            <Link to="/chat"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[56px] min-h-[52px] justify-center ${
+                location.pathname === "/chat"
+                  ? "text-primary bg-primary/10"
+                  : "text-muted-foreground active:bg-muted"
+              }`}>
+              <MessageSquare size={22} strokeWidth={location.pathname === "/chat" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold tracking-tight">AI Chat</span>
+            </Link>
+
+            {/* More */}
+            <button onClick={() => setShowMoreSheet(true)}
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[56px] min-h-[52px] justify-center ${
+                ["/analytics", "/history", "/coach"].includes(location.pathname)
+                  ? "text-primary bg-primary/10"
+                  : "text-muted-foreground active:bg-muted"
+              }`}>
+              <MoreHorizontal size={22} strokeWidth={1.8} />
+              <span className="text-[10px] font-semibold tracking-tight">More</span>
+            </button>
+          </div>
+        </nav>
+
+        {/* More sheet — slides up from bottom */}
+        {showMoreSheet && (
+          <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMoreSheet(false)} />
+            <div className="relative bg-card rounded-t-3xl shadow-2xl animate-fade-up pb-safe">
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-muted" />
+              </div>
+              <div className="px-5 py-3 border-b">
+                <p className="font-display font-bold text-base">More</p>
+              </div>
+              <div className="p-4 grid grid-cols-3 gap-3">
+                {[
+                  { path: "/analytics", icon: BarChart3, label: "Analytics", color: "bg-blue-50 text-blue-600" },
+                  { path: "/history", icon: History, label: "History", color: "bg-purple-50 text-purple-600" },
+                  { path: "/coach", icon: Brain, label: "AI Coach", color: "bg-emerald-50 text-emerald-600" },
+                ].map(({ path, icon: Icon, label, color }) => (
+                  <Link key={path} to={path} onClick={() => setShowMoreSheet(false)}
+                    className="flex flex-col items-center gap-2 p-4 rounded-2xl border bg-card hover:bg-muted transition-colors">
+                    <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center`}>
+                      <Icon size={20} />
+                    </div>
+                    <span className="text-xs font-semibold">{label}</span>
+                  </Link>
+                ))}
+              </div>
+              <div className="px-4 pb-6 space-y-2">
+                <button onClick={() => { setShowAddBiz(true); setShowMoreSheet(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border hover:bg-muted transition-colors text-sm font-medium">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Plus size={18} className="text-primary" />
+                  </div>
+                  Add Business
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Business Modal */}
@@ -169,6 +272,15 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
             await refreshBusinesses();
             setShowAddBiz(false);
           }}
+        />
+      )}
+
+      {/* Bulk Input Modal from bottom nav */}
+      {showBulkModal && activeBusiness && (
+        <BulkInputModal
+          businessId={activeBusiness.id}
+          onClose={() => setShowBulkModal(false)}
+          onSaved={() => setShowBulkModal(false)}
         />
       )}
     </div>

@@ -1,22 +1,32 @@
 import { InventoryItem, formatStockDisplay } from "@/lib/db";
-import { ShoppingCart, Pencil, Trash2, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { getDepletionLabel } from "@/lib/ai";
+import { ShoppingCart, Pencil, Trash2, AlertTriangle, CheckCircle, XCircle, Star, TrendingDown } from "lucide-react";
 
 interface Props {
   item: InventoryItem;
+  salesVelocity?: number;
+  depletionDays?: number | null;
+  isTopPerformer?: boolean;
+  hasSalesInLast30Days?: boolean;
   onSale: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-const InventoryItemCard = ({ item, onSale, onEdit, onDelete }: Props) => {
+const InventoryItemCard = ({ item, salesVelocity, depletionDays, isTopPerformer, hasSalesInLast30Days, onSale, onEdit, onDelete }: Props) => {
   const isOut = item.status === "out_of_stock";
   const isLow = item.status === "low_stock";
   const isPackItem = item.purchase_type === "pack" && (item.units_per_pack ?? 0) > 1;
-
-  const profitPerUnit = item.selling_price && item.cost_price
-    ? item.selling_price - item.cost_price : null;
-
+  const profitPerUnit = item.selling_price && item.cost_price ? item.selling_price - item.cost_price : null;
   const stockDisplay = formatStockDisplay(item);
+  const depletion = depletionDays !== undefined ? getDepletionLabel(depletionDays ?? null) : null;
+
+  const depletionColorMap = {
+    red: "text-red-600 bg-red-50 border-red-200",
+    yellow: "text-amber-600 bg-amber-50 border-amber-200",
+    green: "text-emerald-600 bg-emerald-50 border-emerald-200",
+    gray: "text-muted-foreground bg-muted/40 border-border",
+  };
 
   return (
     <div className={`rounded-2xl border bg-card p-4 transition-all duration-200 hover:shadow-sm ${isOut ? "opacity-60" : ""}`}>
@@ -24,6 +34,11 @@ const InventoryItemCard = ({ item, onSale, onEdit, onDelete }: Props) => {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap mb-1.5">
             <p className="font-semibold text-sm">{item.name}</p>
+            {isTopPerformer && (
+              <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full shrink-0">
+                <Star size={9} fill="currentColor" /> Top Performer
+              </span>
+            )}
             {isOut && (
               <span className="flex items-center gap-1 text-xs text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full shrink-0">
                 <XCircle size={10} /> Out of stock
@@ -34,9 +49,14 @@ const InventoryItemCard = ({ item, onSale, onEdit, onDelete }: Props) => {
                 <AlertTriangle size={10} /> Running low
               </span>
             )}
-            {!isOut && !isLow && item.status && (
+            {!isOut && !isLow && item.status && !isTopPerformer && (
               <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full shrink-0">
                 <CheckCircle size={10} /> In stock
+              </span>
+            )}
+            {hasSalesInLast30Days === false && item.item_type !== "service" && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/40 border px-2 py-0.5 rounded-full shrink-0">
+                <TrendingDown size={9} /> No recent sales
               </span>
             )}
           </div>
@@ -56,6 +76,12 @@ const InventoryItemCard = ({ item, onSale, onEdit, onDelete }: Props) => {
                 <span className="text-muted-foreground"> · ₦{item.unit_selling_price.toLocaleString()} per {item.unit_name ?? "piece"}</span>
               )}
             </p>
+          )}
+
+          {depletion && item.item_type !== "service" && (
+            <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border mt-1.5 ${depletionColorMap[depletion.color]}`}>
+              {depletion.text}
+            </span>
           )}
         </div>
 

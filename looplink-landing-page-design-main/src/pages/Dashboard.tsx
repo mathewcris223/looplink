@@ -6,9 +6,13 @@ import { useBusiness } from "@/context/BusinessContext";
 import { useInventory } from "@/context/InventoryContext";
 import AppShell from "@/components/dashboard/AppShell";
 import AddTransactionModal from "@/components/dashboard/AddTransactionModal";
-import { getTransactions, Transaction } from "@/lib/db";
+import TruthEngine from "@/components/dashboard/TruthEngine";
+import BulkInputModal from "@/components/dashboard/BulkInputModal";
+import DailyWelcome, { shouldShowDailyWelcome, markDailyWelcomeSeen } from "@/components/dashboard/DailyWelcome";
+import DailyChallenge from "@/components/dashboard/DailyChallenge";
+import { getTransactions, getInventorySales, Transaction, InventorySale } from "@/lib/db";
 import { calcHealthScore, generateInsights, AIInsight } from "@/lib/ai";
-import { TrendingUp, TrendingDown, Plus, Lightbulb, Activity, ArrowUpRight, ArrowDownRight, BarChart3, MessageSquare, Package, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, Plus, Layers, Lightbulb, Activity, ArrowUpRight, ArrowDownRight, BarChart3, MessageSquare, Package, AlertTriangle } from "lucide-react";
 
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
@@ -17,7 +21,10 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [inventorySales, setInventorySales] = useState<InventorySale[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [addType, setAddType] = useState<"income" | "expense">("income");
   const [txLoading, setTxLoading] = useState(false);
   const [insights, setInsights] = useState<AIInsight[]>([]);
@@ -39,8 +46,12 @@ const Dashboard = () => {
     if (!activeBusiness) return;
     setTxLoading(true);
     try {
-      const data = await getTransactions(activeBusiness.id, 100);
+      const [data, sales] = await Promise.all([
+        getTransactions(activeBusiness.id, 100),
+        getInventorySales(activeBusiness.id),
+      ]);
       setTransactions(data);
+      setInventorySales(sales);
       // Load AI insights after transactions are fetched
       setInsightsLoading(true);
       try {
@@ -53,6 +64,15 @@ const Dashboard = () => {
   }, [activeBusiness]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
+
+  // Show daily welcome screen once per day after data loads
+  // markDailyWelcomeSeen() is called immediately to prevent re-showing on refresh
+  useEffect(() => {
+    if (!authLoading && !bizLoading && user && activeBusiness && shouldShowDailyWelcome()) {
+      markDailyWelcomeSeen(); // mark BEFORE showing so refresh won't re-trigger
+      setShowWelcome(true);
+    }
+  }, [authLoading, bizLoading, user, activeBusiness]);
 
   if (authLoading || bizLoading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" /></div>;
@@ -79,6 +99,18 @@ const Dashboard = () => {
       activeBusiness={activeBusiness}
       onSelectBusiness={setActiveBusiness}
     >
+      {/* Daily welcome screen — shows once per day */}
+      {showWelcome && user && (
+        <DailyWelcome
+          userName={user.name}
+          onDismiss={() => setShowWelcome(false)}
+        />
+      )}
+      {/* Daily Money Challenge — top of page, always visible */}
+      <div className="mb-6">
+        <DailyChallenge transactions={transactions} />
+      </div>
+
       {/* Header */}
       <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
         <div>
@@ -88,7 +120,10 @@ const Dashboard = () => {
           </h1>
           <p className="text-muted-foreground text-sm mt-1">{activeBusiness.name} · {activeBusiness.type}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="hero-outline" size="sm" className="rounded-full gap-2" onClick={() => setShowBulkModal(true)}>
+            <Layers size={15} /> Bulk Entry
+          </Button>
           <Button variant="hero-outline" size="sm" className="rounded-full gap-2" onClick={() => { setAddType("expense"); setShowAddModal(true); }}>
             <ArrowDownRight size={15} /> Add Expense
           </Button>
@@ -116,6 +151,21 @@ const Dashboard = () => {
             <p className={`text-xl md:text-2xl font-bold font-display ${s.color} break-all leading-tight`}>{s.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Daily Truth Engine */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display font-semibold text-sm text-muted-foreground uppercase tracking-wide">Today's Business Snapshot</h2>
+        </div>
+        <TruthEngine
+          transactions={transactions}
+          inventoryItems={inventoryItems}
+          inventorySales={inventorySales}
+          businessId={activeBusiness.id}
+          businessType={activeBusiness.type}
+          businessName={activeBusiness.name}
+        />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
@@ -293,6 +343,14 @@ const Dashboard = () => {
           businessId={activeBusiness.id}
           defaultType={addType}
           onClose={() => setShowAddModal(false)}
+          onSaved={loadTransactions}
+        />
+      )}
+
+      {showBulkModal && (
+        <BulkInputModal
+          businessId={activeBusiness.id}
+          onClose={() => setShowBulkModal(false)}
           onSaved={loadTransactions}
         />
       )}

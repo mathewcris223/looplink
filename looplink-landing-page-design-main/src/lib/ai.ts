@@ -304,3 +304,173 @@ export function getExpenseBreakdown(transactions: Transaction[]) {
     color: colors[i % colors.length],
   }));
 }
+
+// ── Truth Engine Types ────────────────────────────────────────────────────────
+
+export interface TruthEngineData {
+  todayPnL: number;
+  weeklyTrendPct: number;
+  topProduct: { name: string; profit: number } | null;
+  biggestExpenseCategory: { name: string; total: number } | null;
+  anomaly: { description: string; amount: number; category: string } | null;
+  aiTip: string | null;
+}
+
+// ── Anomaly detection ─────────────────────────────────────────────────────────
+
+export function detectAnomaly(
+  transactions: Transaction[]
+): { description: string; amount: number; category: string } | null {
+  if (transactions.length < 3) return null;
+  const byCategory: Record<string, number[]> = {};
+  transactions.forEach(t => {
+    if (!byCategory[t.category]) byCategory[t.category] = [];
+    byCategory[t.category].push(t.amount);
+  });
+  let anomaly: { description: string; amount: number; category: string } | null = null;
+  for (const [category, amounts] of Object.entries(byCategory)) {
+    if (amounts.length < 2) continue;
+    const mean = amounts.reduce((s, v) => s + v, 0) / amounts.length;
+    const variance = amounts.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / amounts.length;
+    const stddev = Math.sqrt(variance);
+    const threshold = mean + 3 * stddev;
+    const flagged = transactions
+      .filter(t => t.category === category && t.amount > threshold)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    if (flagged) {
+      anomaly = { description: flagged.description, amount: flagged.amount, category };
+      break;
+    }
+  }
+  return anomaly;
+}
+
+// ── Insight color ─────────────────────────────────────────────────────────────
+
+export function getInsightColor(
+  value: number,
+  type: 'pnl' | 'trend' | 'expense'
+): 'green' | 'red' | 'yellow' {
+  if (type === 'expense') return 'red';
+  if (value > 0) return 'green';
+  if (value < 0) return 'red';
+  return 'yellow';
+}
+
+// ── Truth Engine data computation ─────────────────────────────────────────────
+
+export function computeTruthEngineData(
+  transactions: Transaction[],
+  inventoryItems: import('./db').InventoryItem[],
+  inventorySales: import('./db').InventorySale[]
+): Omit<TruthEngineData, 'aiTip'> {
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
+  // Today P&L
+  const todayTx = transactions.filter(t => t.created_at?.startsWith(todayStr));
+  const todayPnL = todayTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+                 - todayTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+
+  // Weekly trend
+  const msPerDay = 86400000;
+  const weekStart = new Date(now.getTime() - 7 * msPerDay);
+  const prevWeekStart = new Date(now.getTime() - 14 * msPerDay);
+  const currentWeekRevenue = transactions
+    .filter(t => t.type === 'income' && new Date(t.created_at) >= weekStart)
+    .reduce((s, t) => s + t.amount, 0);
+  const prevWeekRevenue = transactions
+    .filter(t => t.type === 'income' && new Date(t.created_at) >= prevWeekStart && new Date(t.created_at) < weekStart)
+    .reduce((s, t) => s + t.amount, 0);
+  const weeklyTrendPct = prevWeekRevenue > 0
+    ? Math.round(((currentWeekRevenue - prevWeekRevenue) / prevWeekRevenue) * 1000) / 10
+    : 0;
+
+  // Top product by 30d profit
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * msPerDay);
+  const recentSales = inventorySales.filter(s => new Date(s.created_at) >= thirtyDaysAgo);
+  let topProduct: { name: string; profit: number } | null = null;
+  let maxProfit = -Infinity;
+  for (const item of inventoryItems) {
+    const profit = recentSales
+      .filter(s => s.item_id === item.id)
+      .reduce((s, sale) => s + (sale.profit ?? 0), 0);
+    if (profit > maxProfit) { maxProfit = profit; topProduct = { name: item.name, profit }; }
+  }
+  if (topProduct && maxProfit <= 0) topProduct = null;
+
+  // Biggest expense category this month
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthExpenses = transactions.filter(t => t.type === 'expense' && new Date(t.created_at) >= monthStart);
+  const byCategory: Record<string, number> = {};
+  monthExpenses.forEach(t => { byCategory[t.category] = (byCategory[t.category] || 0) + t.amount; });
+  const topCatEntry = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0];
+  const biggestExpenseCategory = topCatEntry ? { name: topCatEntry[0], total: topCatEntry[1] } : null;
+
+  return { todayPnL, weeklyTrendPct, topProduct, biggestExpenseCategory, anomaly: detectAnomaly(transactions) };
+}
+
+// ── Inventory Intelligence ────────────────────────────────────────────────────
+
+export function computeSalesVelocity(
+  sales: import('./db').InventorySale[],
+  itemId: string
+): number {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000);
+  const recent = sales.filter(s => s.item_id === itemId && new Date(s.created_at) >= thirtyDaysAgo);
+  const totalSold = recent.reduce((s, sale) => s + sale.quantity_sold, 0);
+  return totalSold / 30;
+}
+
+export function computeDepletionDays(currentStock: number, velocity: number): number | null {
+  if (velocity <= 0) return null;
+  return Math.round(currentStock / velocity);
+}
+
+export function getDepletionLabel(days: number | null): { text: string; color: 'red' | 'yellow' | 'green' | 'gray' } {
+  if (days === null) return { text: 'No sales data', color: 'gray' };
+  if (days <= 7) return { text: `Runs out in ~${days} days`, color: 'red' };
+  if (days <= 14) return { text: `Runs out in ~${days} days`, color: 'yellow' };
+  return { text: `~${days} days of stock remaining`, color: 'green' };
+}
+
+export function computeItemProfit30d(
+  sales: import('./db').InventorySale[],
+  itemId: string
+): number {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000);
+  return sales
+    .filter(s => s.item_id === itemId && new Date(s.created_at) >= thirtyDaysAgo)
+    .reduce((s, sale) => s + (sale.profit ?? 0), 0);
+}
+
+// ── Bulk Transaction Parser ───────────────────────────────────────────────────
+
+export interface ParsedTransaction {
+  type: 'income' | 'expense';
+  amount: number | null;
+  description: string;
+  category: string;
+  confidence: 'high' | 'low';
+}
+
+export async function parseTransactions(rawText: string): Promise<ParsedTransaction[]> {
+  const prompt = `Parse the following text into a JSON array of transactions. Each item must have:
+- type: "income" or "expense"
+- amount: number (extract numeric value, null if unclear)
+- description: string (what the transaction is for)
+- category: string (suggest a category like "Food", "Transport", "Sales", "Stock", "Marketing", etc.)
+- confidence: "high" if type and amount are clear, "low" if uncertain
+
+Text: ${rawText}
+
+Return ONLY a valid JSON array. No markdown, no explanation.`;
+
+  const { aiRequest } = await import('./aiClient');
+  const raw = await aiRequest({ message: prompt, mode: 'chat' });
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error("Couldn't parse your input. Try rephrasing or add entries one at a time.");
+  const parsed = JSON.parse(match[0]) as ParsedTransaction[];
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("No transactions found in your input.");
+  return parsed;
+}

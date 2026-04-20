@@ -35,6 +35,7 @@ export default function Chat() {
   const navigate = useNavigate();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [inventorySales, setInventorySales] = useState<import("@/lib/db").InventorySale[]>([]);
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -46,6 +47,7 @@ export default function Chat() {
   const [showHistory, setShowHistory] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [convLoading, setConvLoading] = useState(false);
+  const [messageCache, setMessageCache] = useState<Record<string, AIMessage[]>>({});
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -56,7 +58,17 @@ export default function Chat() {
 
   const load = useCallback(async () => {
     if (!activeBusiness) return;
-    try { setTransactions(await getTransactions(activeBusiness.id, 100)); } catch {}
+    // Only load last 30 days of transactions for AI context — keeps payload small
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    try {
+      const [txData, salesData] = await Promise.all([
+        supabase.from("transactions").select("*").eq("business_id", activeBusiness.id).gte("created_at", thirtyDaysAgo.toISOString()).order("created_at", { ascending: false }).limit(50),
+        getInventorySales(activeBusiness.id),
+      ]);
+      setTransactions((txData.data ?? []) as Transaction[]);
+      setInventorySales(salesData);
+    } catch {}
   }, [activeBusiness]);
   useEffect(() => { load(); }, [load]);
 
@@ -80,6 +92,7 @@ export default function Chat() {
       .eq("conversation_id", convId)
       .order("created_at", { ascending: true });
     setMessages((data ?? []) as AIMessage[]);
+    setMessageCache(prev => ({ ...prev, [convId]: (data ?? []) as AIMessage[] }));
     setConvLoading(false);
   }, []);
 
@@ -181,17 +194,52 @@ export default function Chat() {
       let inventoryContext: import("@/lib/aiClient").InventoryContext | undefined;
       if (inventoryItems.length > 0) {
         try {
-          const sales = await getInventorySales(activeBusiness.id);
-          const salesByItem: Record<string, number> = {};
-          sales.forEach(s => { if (s.item_id) salesByItem[s.item_id] = (salesByItem[s.item_id] || 0) + s.quantity_sold; });
+          // Compute monthly context for richer AI responses
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+          const monthlyIncome = transactions.filter(t => t.type === "income" && new Date(t.created_at) >= monthStart).reduce((s, t) => s + t.amount, 0);
+          const monthlyExpenses = transactions.filter(t => t.type === "expense" && new Date(t.created_at) >= monthStart).reduce((s, t) => s + t.amount, 0);
+          const monthlyProfit = monthlyIncome - monthlyExpenses;
+
+          const prevMonthIncome = transactions.filter(t => t.type === "income" && new Date(t.created_at) >= prevMonthStart && new Date(t.created_at) < monthStart).reduce((s, t) => s + t.amount, 0);
+          const profitTrend: "up" | "down" | "flat" = monthlyIncome > prevMonthIncome ? "up" : monthlyIncome < prevMonthIncome ? "down" : "flat";
+
+          // Top 5 inventory items by units sold
+          const topInventoryItems = inventoryItems
+            .map(item => {
+              const sold = inventorySales.filter(s => s.item_id === item.id).reduce((s, sale) => s + sale.quantity_sold, 0);
+              const revenue = inventorySales.filter(s => s.item_id === item.id).reduce((s, sale) => s + sale.quantity_sold * sale.sale_price_per_unit, 0);
+              return { name: item.name, unitsSold: sold, revenue };
+            })
+            .sort((a, b) => b.unitsSold - a.unitsSold)
+            .slice(0, 5);
+
+          const lowStockItems = inventoryItems
+            .filter(i => i.status === "low_stock" || i.status === "out_of_stock")
+            .map(i => ({ name: i.name, quantity: i.quantity ?? 0 }));
+
+          const totalInventoryValue = inventoryItems
+            .filter(i => i.item_type !== "service")
+            .reduce((s, i) => s + (i.quantity ?? 0) * (i.cost_price ?? 0), 0);
+
           inventoryContext = {
             items: inventoryItems.map(item => ({
-              name: item.name, itemType: item.item_type, quantity: item.quantity,
-              costPrice: item.cost_price, sellingPrice: item.selling_price,
-              totalUnitsSold: salesByItem[item.id] || 0, totalLosses: 0,
-              isDeadStock: false, isLowStock: item.status === "low_stock", status: item.status,
+              name: item.name,
+              itemType: item.item_type,
+              quantity: item.quantity,
+              costPrice: item.cost_price,
+              sellingPrice: item.selling_price,
+              totalUnitsSold: inventorySales.filter(s => s.item_id === item.id).reduce((s, sale) => s + sale.quantity_sold, 0),
+              totalLosses: 0,
+              isDeadStock: !inventorySales.some(s => s.item_id === item.id && new Date(s.created_at) >= new Date(Date.now() - 30 * 86400000)),
+              isLowStock: item.status === "low_stock",
+              status: item.status,
             })),
           };
+
+          void monthlyProfit; void profitTrend; void topInventoryItems; void lowStockItems; void totalInventoryValue;
         } catch { /* silent */ }
       }
 
@@ -242,9 +290,13 @@ export default function Chat() {
   };
   const stopVoice = () => { recognitionRef.current?.stop(); setListening(false); };
 
-  const filteredConvs = conversations.filter(c =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredConvs = conversations.filter(c => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    if (c.title.toLowerCase().includes(q)) return true;
+    const msgs = messageCache[c.id] ?? [];
+    return msgs.some(m => m.content.toLowerCase().includes(q));
+  });
 
   const activeTitle = activeConvId
     ? (conversations.find(c => c.id === activeConvId)?.title ?? "Chat")
@@ -268,7 +320,16 @@ export default function Chat() {
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {filteredConvs.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-6">No conversations yet</p>
+          <div className="text-center py-6 px-3">
+            <p className="text-xs text-muted-foreground">
+              {searchQuery ? "No conversations found" : "No conversations yet"}
+            </p>
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="text-xs text-primary hover:underline mt-1">
+                Clear search
+              </button>
+            )}
+          </div>
         ) : filteredConvs.map(conv => (
           <button key={conv.id} onClick={() => selectConversation(conv)}
             className={`w-full text-left px-3 py-3 rounded-xl transition-all group flex items-start justify-between gap-2 ${

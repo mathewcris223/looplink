@@ -441,3 +441,54 @@ export async function setSellsGoodsDB(value: boolean): Promise<void> {
   if (!user) return;
   await supabase.from("profiles").upsert({ id: user.id, sells_goods: value }, { onConflict: "id" });
 }
+
+// ── Inventory Sale Edit/Delete ────────────────────────────────────────────────
+
+export async function updateInventorySale(
+  saleId: string,
+  updates: { quantity_sold: number; sale_price_per_unit: number; profit?: number }
+): Promise<InventorySale> {
+  // Fetch existing sale to compute stock delta
+  const { data: existing, error: fetchErr } = await supabase
+    .from('inventory_sales').select('quantity_sold, item_id').eq('id', saleId).single();
+  if (fetchErr) throw fetchErr;
+
+  const delta = existing.quantity_sold - updates.quantity_sold; // positive = stock increases
+
+  // Update sale record
+  const { data, error } = await supabase
+    .from('inventory_sales')
+    .update({ quantity_sold: updates.quantity_sold, sale_price_per_unit: updates.sale_price_per_unit, profit: updates.profit ?? null })
+    .eq('id', saleId).select().single();
+  if (error) throw error;
+
+  // Adjust item stock by delta
+  if (existing.item_id && delta !== 0) {
+    const { data: item } = await supabase
+      .from('inventory_items').select('quantity, item_type, low_stock_threshold').eq('id', existing.item_id).single();
+    if (item) {
+      const newQty = Math.max(0, (item.quantity ?? 0) + delta);
+      const newStatus = newQty <= 0 ? 'out_of_stock' : newQty <= (item.low_stock_threshold ?? 5) ? 'low_stock' : 'in_stock';
+      await supabase.from('inventory_items').update({ quantity: newQty, status: newStatus }).eq('id', existing.item_id);
+    }
+  }
+
+  return data as InventorySale;
+}
+
+export async function deleteInventorySale(
+  saleId: string,
+  itemId: string,
+  quantityToRestore: number
+): Promise<void> {
+  const { error: deleteErr } = await supabase.from('inventory_sales').delete().eq('id', saleId);
+  if (deleteErr) throw deleteErr;
+
+  const { data: item } = await supabase
+    .from('inventory_items').select('quantity, item_type, low_stock_threshold').eq('id', itemId).single();
+  if (item) {
+    const newQty = (item.quantity ?? 0) + quantityToRestore;
+    const newStatus = newQty <= 0 ? 'out_of_stock' : newQty <= (item.low_stock_threshold ?? 5) ? 'low_stock' : 'in_stock';
+    await supabase.from('inventory_items').update({ quantity: newQty, status: newStatus }).eq('id', itemId);
+  }
+}

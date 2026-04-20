@@ -7,10 +7,14 @@ import AppShell from "@/components/dashboard/AppShell";
 import InventoryItemCard from "@/components/inventory/InventoryItemCard";
 import AddProductModal from "@/components/inventory/AddProductModal";
 import RecordSaleModal from "@/components/inventory/RecordSaleModal";
-import { InventoryItem, deriveStockStatus } from "@/lib/db";
+import EditSaleModal from "@/components/inventory/EditSaleModal";
+import { InventoryItem, InventorySale, getInventorySales, deriveStockStatus } from "@/lib/db";
+import { computeSalesVelocity, computeDepletionDays, computeItemProfit30d } from "@/lib/ai";
 import { supabase } from "@/lib/supabase";
 import { Package, Plus, ShoppingCart, AlertTriangle, X, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+type InvItem = InventoryItem;
 
 type Modal = "add" | "sale" | "edit" | null;
 
@@ -22,8 +26,15 @@ const Inventory = () => {
 
   const [modal, setModal] = useState<Modal>(null);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [inventorySales, setInventorySales] = useState<InventorySale[]>([]);
+  const [editSale, setEditSale] = useState<{ sale: InventorySale; item: InvItem } | null>(null);
 
   useEffect(() => { if (!authLoading && !user) navigate("/login"); }, [user, authLoading, navigate]);
+
+  useEffect(() => {
+    if (!activeBusiness) return;
+    getInventorySales(activeBusiness.id).then(setInventorySales).catch(() => {});
+  }, [activeBusiness, loading]);
 
   if (authLoading || bizLoading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -47,6 +58,14 @@ const Inventory = () => {
 
   const lowStockCount = inventoryItems.filter(i => i.status === "low_stock").length;
   const outOfStockCount = inventoryItems.filter(i => i.status === "out_of_stock").length;
+
+  const topPerformerId = inventoryItems.length > 0
+    ? inventoryItems.reduce((best, item) => {
+        const profit = computeItemProfit30d(inventorySales, item.id);
+        const bestProfit = computeItemProfit30d(inventorySales, best.id);
+        return profit > bestProfit ? item : best;
+      }, inventoryItems[0]).id
+    : null;
 
   return (
     <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness}>
@@ -119,6 +138,10 @@ const Inventory = () => {
             <InventoryItemCard
               key={item.id}
               item={item}
+              salesVelocity={computeSalesVelocity(inventorySales, item.id)}
+              depletionDays={computeDepletionDays(item.quantity ?? 0, computeSalesVelocity(inventorySales, item.id))}
+              isTopPerformer={item.id === topPerformerId && computeItemProfit30d(inventorySales, item.id) > 0}
+              hasSalesInLast30Days={inventorySales.some(s => s.item_id === item.id && new Date(s.created_at) >= new Date(Date.now() - 30 * 86400000))}
               onSale={() => openSale(item)}
               onEdit={() => openEdit(item)}
               onDelete={() => handleDelete(item)}
@@ -142,6 +165,18 @@ const Inventory = () => {
       )}
       {modal === "edit" && selectedItem && (
         <EditItemModal item={selectedItem} onClose={closeModal} onSuccess={onSuccess} />
+      )}
+      {editSale && (
+        <EditSaleModal
+          sale={editSale.sale}
+          item={editSale.item}
+          onClose={() => setEditSale(null)}
+          onSaved={() => {
+            refreshInventory();
+            getInventorySales(activeBusiness!.id).then(setInventorySales);
+            setEditSale(null);
+          }}
+        />
       )}
     </AppShell>
   );

@@ -34,6 +34,31 @@ const History = () => {
   const handleDelete = async (tx: Transaction) => {
     if (!confirm(`Delete this transaction?\n"${tx.description}" — ₦${tx.amount.toLocaleString()}\n\nThis cannot be undone.`)) return;
     try {
+      // If this is an inventory sale, try to restore stock
+      if (tx.description.startsWith("Sold:")) {
+        const { data: invSale } = await supabase
+          .from("inventory_sales")
+          .select("id, item_id, quantity_sold")
+          .eq("business_id", activeBusiness!.id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+        if (invSale && invSale.length > 0) {
+          const sale = invSale[0];
+          if (sale.item_id && sale.quantity_sold) {
+            const { data: item } = await supabase
+              .from("inventory_items")
+              .select("quantity, item_type, low_stock_threshold")
+              .eq("id", sale.item_id)
+              .single();
+            if (item) {
+              const newQty = (item.quantity ?? 0) + sale.quantity_sold;
+              const newStatus = newQty <= 0 ? "out_of_stock" : newQty <= (item.low_stock_threshold ?? 5) ? "low_stock" : "in_stock";
+              await supabase.from("inventory_items").update({ quantity: newQty, status: newStatus }).eq("id", sale.item_id);
+              await supabase.from("inventory_sales").delete().eq("id", sale.id);
+            }
+          }
+        }
+      }
       await supabase.from("transactions").delete().eq("id", tx.id);
       setTransactions(prev => prev.filter(t => t.id !== tx.id));
     } catch { /* silent */ }
