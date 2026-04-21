@@ -20,6 +20,8 @@ import History from "./pages/History.tsx";
 import Chat from "./pages/Chat.tsx";
 import Inventory from "./pages/Inventory.tsx";
 import Learn from "./pages/Learn.tsx";
+import AIHub from "./pages/AIHub.tsx";
+import ManageBusinesses from "./pages/ManageBusinesses.tsx";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +47,8 @@ const App = () => (
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/learn" element={<Learn />} />
+                <Route path="/ai" element={<AIHub />} />
+                <Route path="/businesses" element={<ManageBusinesses />} />
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

@@ -6,7 +6,7 @@ import AppShell from "@/components/dashboard/AppShell";
 import AddTransactionModal from "@/components/dashboard/AddTransactionModal";
 import SmartAddModal from "@/components/dashboard/SmartAddModal";
 import { getTransactions, Transaction } from "@/lib/db";
-import { ArrowUpRight, ArrowDownRight, Plus, BarChart3, MessageSquare, Brain, TrendingUp, TrendingDown, CheckCircle2, Flame } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Plus, BarChart3, MessageSquare, Brain, Package, CheckCircle2, Flame, Sparkles, Building2 } from "lucide-react";
 
 const CHECKIN_KEY = "ll_checkin";
 
@@ -108,12 +108,20 @@ const Home = () => {
   return (
     <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness}>
       {/* Greeting */}
-      <div className="mb-5">
-        <p className="text-muted-foreground text-sm">{greeting},</p>
-        <h1 className="font-display text-2xl font-bold">
-          <span className="text-gradient">{user.name.split(" ")[0]}</span> 👋
-        </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">{activeBusiness.name}</p>
+      <div className="mb-5 flex items-start justify-between">
+        <div>
+          <p className="text-muted-foreground text-sm">{greeting},</p>
+          <h1 className="font-display text-2xl font-bold">
+            <span className="text-gradient">{user.name.split(" ")[0]}</span> 👋
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">{activeBusiness.name}</p>
+        </div>
+        <button
+          onClick={() => navigate("/businesses")}
+          className="flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-2 rounded-xl transition-colors active:scale-95 shrink-0 mt-1">
+          <Building2 size={14} />
+          Manage
+        </button>
       </div>
 
       {/* Today's Summary */}
@@ -121,7 +129,7 @@ const Home = () => {
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Today's Summary</p>
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="text-center">
-            <p className="text-xs text-muted-foreground mb-1">Income</p>
+            <p className="text-xs text-muted-foreground mb-1">Revenue</p>
             <p className="text-base font-bold text-emerald-600">₦{todayIncome.toLocaleString()}</p>
           </div>
           <div className="text-center border-x">
@@ -141,7 +149,7 @@ const Home = () => {
         </div>
       </div>
 
-      {/* 4 Action Buttons */}
+      {/* Action Buttons — 2x3 grid */}
       <div className="grid grid-cols-2 gap-3 mb-5">
         {[
           {
@@ -152,18 +160,25 @@ const Home = () => {
             action: () => setShowSmartAdd(true),
           },
           {
-            label: "View Dashboard",
+            label: "Dashboard",
             desc: "See full analytics",
             icon: BarChart3,
             color: "bg-blue-50 text-blue-700 border",
             action: () => navigate("/dashboard"),
           },
           {
-            label: "Ask AI",
-            desc: "Get business advice",
-            icon: MessageSquare,
+            label: "AI Hub",
+            desc: "Chat, coach & analytics",
+            icon: Sparkles,
             color: "bg-violet-50 text-violet-700 border",
-            action: () => navigate("/chat"),
+            action: () => navigate("/ai"),
+          },
+          {
+            label: "Inventory",
+            desc: "Manage your stock",
+            icon: Package,
+            color: "bg-emerald-50 text-emerald-700 border",
+            action: () => navigate("/inventory"),
           },
           {
             label: "Learn",
@@ -172,10 +187,17 @@ const Home = () => {
             color: "bg-amber-50 text-amber-700 border",
             action: () => navigate("/learn"),
           },
+          {
+            label: "History",
+            desc: "All transactions",
+            icon: MessageSquare,
+            color: "bg-muted text-foreground border",
+            action: () => navigate("/history"),
+          },
         ].map(({ label, desc, icon: Icon, color, action }) => (
           <button key={label} onClick={action}
             className={`flex flex-col items-start gap-2 p-4 rounded-2xl ${color} active:scale-95 transition-all duration-150 text-left shadow-sm`}>
-            <Icon size={22} />
+            <Icon size={20} />
             <div>
               <p className="text-sm font-bold leading-tight">{label}</p>
               <p className="text-xs opacity-70 mt-0.5">{desc}</p>

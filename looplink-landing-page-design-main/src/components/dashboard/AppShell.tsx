@@ -25,6 +25,7 @@ const navItems = [
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/chat", icon: MessageSquare, label: "AI Chat" },
   { path: "/learn", icon: Brain, label: "Learn" },
+  { path: "/businesses", icon: Building2, label: "Businesses" },
   { path: "/history", icon: History, label: "History" },
 ];
 
@@ -147,14 +148,22 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Mobile topbar — no hamburger, just logo */}
-        <header className="md:hidden border-b bg-card/95 backdrop-blur sticky top-0 z-40 px-4 h-14 flex items-center justify-center shrink-0">
+        {/* Mobile topbar — logo center, manage businesses right */}
+        <header className="md:hidden border-b bg-card/95 backdrop-blur sticky top-0 z-40 px-4 h-14 flex items-center justify-between shrink-0">
+          <div className="w-10" />
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-lg bg-gradient-brand flex items-center justify-center">
               <Zap size={12} className="text-white" />
             </div>
             <span className="font-display font-bold text-sm">LoopLink</span>
           </div>
+          <button
+            onClick={() => navigate("/businesses")}
+            className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center active:bg-muted/80 transition-colors"
+            title="Manage Businesses"
+          >
+            <Building2 size={18} className="text-foreground" />
+          </button>
         </header>
 
         <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto overflow-x-hidden pb-28 md:pb-0">
@@ -193,12 +202,12 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
               <span className="text-[10px] font-semibold tracking-tight text-muted-foreground mt-0.5">Add</span>
             </button>
 
-            {/* AI Chat */}
-            <Link to="/chat"
+            {/* AI Hub */}
+            <Link to="/ai"
               className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
-                location.pathname === "/chat" ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
+                ["/ai", "/chat", "/coach"].includes(location.pathname) ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
               }`}>
-              <MessageSquare size={22} strokeWidth={location.pathname === "/chat" ? 2.5 : 1.8} />
+              <MessageSquare size={22} strokeWidth={["/ai", "/chat", "/coach"].includes(location.pathname) ? 2.5 : 1.8} />
               <span className="text-[10px] font-semibold tracking-tight">AI</span>
             </Link>
 
@@ -230,7 +239,7 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
                 {[
                   { path: "/analytics", icon: BarChart3, label: "Analytics", color: "bg-blue-50 text-blue-600" },
                   { path: "/history", icon: History, label: "History", color: "bg-purple-50 text-purple-600" },
-                  { path: "/coach", icon: Brain, label: "AI Coach", color: "bg-emerald-50 text-emerald-600" },
+                  { path: "/businesses", icon: Building2, label: "Businesses", color: "bg-emerald-50 text-emerald-600" },
                 ].map(({ path, icon: Icon, label, color }) => (
                   <Link key={path} to={path} onClick={() => setShowMoreSheet(false)}
                     className="flex flex-col items-center gap-2 p-4 rounded-2xl border bg-card hover:bg-muted transition-colors">

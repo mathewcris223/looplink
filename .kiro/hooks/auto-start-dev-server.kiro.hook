@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Auto Start Dev Server",
+  "description": "Automatically starts the Vite dev server after every agent session ends, keeping localhost:8080 always available",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd looplink-landing-page-design-main && npm run dev"
+  }
+}

@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { X, PenLine, Mic, Camera, Upload, Loader2, MicOff, CheckCircle } from "lucide-react";
+import { X, PenLine, Mic, Camera, Upload, Loader2, MicOff, CheckCircle, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { parseTransactions, ParsedTransaction } from "@/lib/ai";
 import { addTransaction } from "@/lib/db";
@@ -10,9 +10,9 @@ interface Props {
   onSaved: () => void;
 }
 
-type Mode = "menu" | "manual" | "voice" | "image" | "upload" | "preview";
+type Mode = "menu" | "manual" | "bulk" | "voice" | "image" | "upload" | "preview";
 
-const CATEGORIES_INCOME = ["Product Sale", "Service", "Commission", "Other"];
+const CATEGORIES_REVENUE = ["Product Sale", "Service", "Commission", "Other"];
 const CATEGORIES_EXPENSE = ["Stock", "Transport", "Rent", "Staff", "Marketing", "Other"];
 
 const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
@@ -31,6 +31,7 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
   const [manualAmount, setManualAmount] = useState("");
   const [manualDesc, setManualDesc] = useState("");
   const [manualCat, setManualCat] = useState("Product Sale");
+  const [bulkText, setBulkText] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -143,6 +144,7 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
             <h2 className="font-display font-bold text-lg">
               {mode === "menu" ? "Add Entry" :
                mode === "manual" ? "Manual Entry" :
+               mode === "bulk" ? "Bulk Entry" :
                mode === "voice" ? "Voice Entry" :
                mode === "image" ? "Snap Receipt" :
                mode === "upload" ? "Upload File" : "Review & Save"}
@@ -168,9 +170,9 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
             <div className="grid grid-cols-2 gap-3">
               {[
                 { id: "manual", icon: PenLine, label: "Enter Manually", desc: "Type amount & details", color: "bg-blue-50 text-blue-600" },
+                { id: "bulk", icon: Layers, label: "Bulk Entry", desc: "Multiple entries at once", color: "bg-emerald-50 text-emerald-600" },
                 { id: "voice", icon: Mic, label: "Speak Entry", desc: "Talk to record", color: "bg-violet-50 text-violet-600" },
-                { id: "image", icon: Camera, label: "Snap Receipt", desc: "Take a photo", color: "bg-emerald-50 text-emerald-600" },
-                { id: "upload", icon: Upload, label: "Upload File", desc: "From gallery or files", color: "bg-amber-50 text-amber-600" },
+                { id: "image", icon: Camera, label: "Snap Receipt", desc: "Take a photo", color: "bg-amber-50 text-amber-600" },
               ].map(({ id, icon: Icon, label, desc, color }) => (
                 <button key={id} onClick={() => setMode(id as Mode)}
                   className="flex flex-col items-start gap-3 p-4 rounded-2xl border bg-card hover:border-primary hover:bg-primary/5 transition-all text-left active:scale-95">
@@ -186,6 +188,28 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
             </div>
           )}
 
+          {/* ── BULK ENTRY ── */}
+          {mode === "bulk" && (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-muted/40 border px-4 py-3 text-xs text-muted-foreground">
+                Type multiple entries separated by commas or new lines.<br />
+                <span className="font-medium text-foreground">Example:</span> "Rice 20000, transport 5000, sold coke 15000"
+              </div>
+              <textarea
+                autoFocus
+                value={bulkText}
+                onChange={e => setBulkText(e.target.value)}
+                placeholder="Rice 20000, transport 5000, sold coke 15000..."
+                className="w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
+                style={{ minHeight: "140px" }}
+              />
+              {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
+              <Button variant="hero" size="lg" onClick={() => parseAndPreview(bulkText)} disabled={parsing || !bulkText.trim()} className="w-full rounded-xl">
+                {parsing ? <><Loader2 size={16} className="animate-spin" /> Detecting entries…</> : "Detect Transactions →"}
+              </Button>
+            </div>
+          )}
+
           {/* ── MANUAL ── */}
           {mode === "manual" && (
             <div className="space-y-4">
@@ -194,7 +218,7 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
                 {(["income", "expense"] as const).map(t => (
                   <button key={t} onClick={() => { setManualType(t); setManualCat(t === "income" ? "Product Sale" : "Stock"); }}
                     className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${manualType === t ? (t === "income" ? "bg-emerald-500 text-white" : "bg-red-500 text-white") : "bg-muted/40 text-muted-foreground"}`}>
-                    {t === "income" ? "💰 Income" : "💸 Expense"}
+                    {t === "income" ? "💰 Revenue" : "💸 Expense"}
                   </button>
                 ))}
               </div>
@@ -214,7 +238,7 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
               <div>
                 <label className="text-sm font-medium">Category</label>
                 <select value={manualCat} onChange={e => setManualCat(e.target.value)} className={`${inputCls} mt-1.5`}>
-                  {(manualType === "income" ? CATEGORIES_INCOME : CATEGORIES_EXPENSE).map(c => (
+                  {(manualType === "income" ? CATEGORIES_REVENUE : CATEGORIES_EXPENSE).map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
@@ -313,7 +337,7 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
           {mode === "preview" && (
             <div className="space-y-4">
               <div className="rounded-xl bg-muted/40 px-4 py-3 text-sm flex flex-wrap gap-4">
-                <span className="text-emerald-600 font-medium">{rows.filter(r => r.type === "income").length} income</span>
+                <span className="text-emerald-600 font-medium">{rows.filter(r => r.type === "income").length} revenue</span>
                 <span className="text-red-500 font-medium">{rows.filter(r => r.type === "expense").length} expense</span>
               </div>
               <div className="space-y-2">
@@ -323,7 +347,7 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
                       <div>
                         <p className="text-[10px] text-muted-foreground mb-1">Type</p>
                         <select value={row.type} onChange={e => updateRow(i, "type", e.target.value)} className={`${smallInputCls} w-full`}>
-                          <option value="income">Income</option>
+                          <option value="income">Revenue</option>
                           <option value="expense">Expense</option>
                         </select>
                       </div>

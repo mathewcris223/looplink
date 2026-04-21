@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
@@ -11,7 +11,7 @@ import EditSaleModal from "@/components/inventory/EditSaleModal";
 import { InventoryItem, InventorySale, getInventorySales, deriveStockStatus } from "@/lib/db";
 import { computeSalesVelocity, computeDepletionDays, computeItemProfit30d } from "@/lib/ai";
 import { supabase } from "@/lib/supabase";
-import { Package, Plus, ShoppingCart, AlertTriangle, X, ChevronDown } from "lucide-react";
+import { Package, Plus, ShoppingCart, AlertTriangle, X, ChevronDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type InvItem = InventoryItem;
@@ -28,6 +28,7 @@ const Inventory = () => {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [inventorySales, setInventorySales] = useState<InventorySale[]>([]);
   const [editSale, setEditSale] = useState<{ sale: InventorySale; item: InvItem } | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => { if (!authLoading && !user) navigate("/login"); }, [user, authLoading, navigate]);
 
@@ -59,6 +60,13 @@ const Inventory = () => {
   const lowStockCount = inventoryItems.filter(i => i.status === "low_stock").length;
   const outOfStockCount = inventoryItems.filter(i => i.status === "out_of_stock").length;
 
+  const filteredItems = useMemo(() =>
+    search.trim()
+      ? inventoryItems.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+      : inventoryItems,
+    [inventoryItems, search]
+  );
+
   const topPerformerId = inventoryItems.length > 0
     ? inventoryItems.reduce((best, item) => {
         const profit = computeItemProfit30d(inventorySales, item.id);
@@ -70,20 +78,42 @@ const Inventory = () => {
   return (
     <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness}>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
+      <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
         <div>
           <h1 className="font-display text-2xl md:text-3xl font-bold">Inventory</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{activeBusiness.name}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="hero-outline" size="sm" className="rounded-full gap-1.5" onClick={() => openSale()}>
-            <ShoppingCart size={14} /> Record Sale
-          </Button>
+          {/* Only show Record Sale when items exist */}
+          {inventoryItems.length > 0 && (
+            <Button variant="hero-outline" size="sm" className="rounded-full gap-1.5" onClick={() => openSale()}>
+              <ShoppingCart size={14} /> Record Sale
+            </Button>
+          )}
           <Button variant="hero" size="sm" className="rounded-full gap-1.5" onClick={() => setModal("add")}>
             <Plus size={14} /> Add Item
           </Button>
         </div>
       </div>
+
+      {/* Search bar — only when items exist */}
+      {inventoryItems.length > 0 && (
+        <div className="relative mb-5">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full rounded-xl border bg-card pl-10 pr-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Summary row */}
       {inventoryItems.length > 0 && (() => {
@@ -134,19 +164,25 @@ const Inventory = () => {
       {/* Item list */}
       {!loading && inventoryItems.length > 0 && (
         <div className="space-y-2">
-          {inventoryItems.map(item => (
-            <InventoryItemCard
-              key={item.id}
-              item={item}
-              salesVelocity={computeSalesVelocity(inventorySales, item.id)}
-              depletionDays={computeDepletionDays(item.quantity ?? 0, computeSalesVelocity(inventorySales, item.id))}
-              isTopPerformer={item.id === topPerformerId && computeItemProfit30d(inventorySales, item.id) > 0}
-              hasSalesInLast30Days={inventorySales.some(s => s.item_id === item.id && new Date(s.created_at) >= new Date(Date.now() - 30 * 86400000))}
-              onSale={() => openSale(item)}
-              onEdit={() => openEdit(item)}
-              onDelete={() => handleDelete(item)}
-            />
-          ))}
+          {filteredItems.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              No items match "<span className="font-medium">{search}</span>"
+            </div>
+          ) : (
+            filteredItems.map(item => (
+              <InventoryItemCard
+                key={item.id}
+                item={item}
+                salesVelocity={computeSalesVelocity(inventorySales, item.id)}
+                depletionDays={computeDepletionDays(item.quantity ?? 0, computeSalesVelocity(inventorySales, item.id))}
+                isTopPerformer={item.id === topPerformerId && computeItemProfit30d(inventorySales, item.id) > 0}
+                hasSalesInLast30Days={inventorySales.some(s => s.item_id === item.id && new Date(s.created_at) >= new Date(Date.now() - 30 * 86400000))}
+                onSale={() => openSale(item)}
+                onEdit={() => openEdit(item)}
+                onDelete={() => handleDelete(item)}
+              />
+            ))
+          )}
         </div>
       )}
 

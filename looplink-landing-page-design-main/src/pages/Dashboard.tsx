@@ -107,11 +107,6 @@ const Dashboard = () => {
         />
       )}
 
-      {/* Daily Money Challenge — top of page, always visible */}
-      <div className="mb-6">
-        <DailyChallenge transactions={transactions} />
-      </div>
-
       {/* Header */}
       <div className="mb-6">
         <h1 className="font-display text-2xl md:text-3xl font-bold">
@@ -124,7 +119,7 @@ const Dashboard = () => {
       {/* Financial Overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         {[
-          { label: "Total Income", value: `₦${income.toLocaleString()}`, icon: ArrowUpRight, color: "text-emerald-600", bg: "bg-emerald-50" },
+          { label: "Total Revenue", value: `₦${income.toLocaleString()}`, icon: ArrowUpRight, color: "text-emerald-600", bg: "bg-emerald-50" },
           { label: "Total Expenses", value: `₦${expenses.toLocaleString()}`, icon: ArrowDownRight, color: "text-red-500", bg: "bg-red-50" },
           { label: "Net Profit", value: `${profit >= 0 ? "+" : ""}₦${profit.toLocaleString()}`, icon: TrendingUp, color: profit >= 0 ? "text-emerald-600" : "text-red-500", bg: profit >= 0 ? "bg-emerald-50" : "bg-red-50" },
           { label: "Health Score", value: `${health.score}/100`, icon: Activity, color: health.color, bg: health.score >= 65 ? "bg-emerald-50" : health.score >= 45 ? "bg-amber-50" : "bg-red-50" },
@@ -141,18 +136,7 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* Today's Snapshot */}
-      <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Today's Snapshot</p>
-        <TruthEngine
-          transactions={transactions}
-          inventoryItems={inventoryItems}
-          inventorySales={inventorySales}
-          businessId={activeBusiness.id}
-          businessType={activeBusiness.type}
-          businessName={activeBusiness.name}
-        />
-      </div>
+      {/* Today's Snapshot — removed per UX cleanup */}
 
       <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
         {/* Left col */}
