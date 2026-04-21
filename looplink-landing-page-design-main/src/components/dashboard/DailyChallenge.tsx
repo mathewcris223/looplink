@@ -21,7 +21,7 @@ const DailyChallenge = ({ transactions }: Props) => {
   const [selected, setSelected] = useState<number | null>(null);
   const [result, setResult] = useState<{ correct: boolean; message: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true); // default collapsed — user must click to open
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -39,15 +39,22 @@ const DailyChallenge = ({ transactions }: Props) => {
   useEffect(() => { load(); }, [load]);
 
   const handleAnswer = async (idx: number) => {
-    if (!profile || !question || submitting || selected !== null) return;
+    // Guard: don't allow if already selected, submitting, or missing data
+    if (!profile || !question || submitting || selected !== null || result !== null) return;
+    // Immediately lock UI with selected index
     setSelected(idx);
     setSubmitting(true);
     try {
       const { correct, newProfile } = await submitAnswer(profile, question, idx);
       setProfile(newProfile);
       setResult({ correct, message: getMotivationalMessage(correct, newProfile.current_streak) });
-    } catch { /* silent */ }
-    finally { setSubmitting(false); }
+    } catch (err) {
+      // On error, reset so user can retry
+      setSelected(null);
+      console.error("Challenge submit error:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!user || loading) return (

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
 import { useInventory } from "@/context/InventoryContext";
@@ -12,7 +11,7 @@ import DailyWelcome, { shouldShowDailyWelcome, markDailyWelcomeSeen } from "@/co
 import DailyChallenge from "@/components/dashboard/DailyChallenge";
 import { getTransactions, getInventorySales, Transaction, InventorySale } from "@/lib/db";
 import { calcHealthScore, generateInsights, AIInsight } from "@/lib/ai";
-import { TrendingUp, TrendingDown, Plus, Layers, Lightbulb, Activity, ArrowUpRight, ArrowDownRight, BarChart3, MessageSquare, Package, AlertTriangle } from "lucide-react";
+import { Lightbulb, Activity, ArrowUpRight, ArrowDownRight, Package, AlertTriangle, TrendingUp, Clock } from "lucide-react";
 
 const Dashboard = () => {
   const { user, loading: authLoading } = useAuth();
@@ -22,9 +21,17 @@ const Dashboard = () => {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [inventorySales, setInventorySales] = useState<InventorySale[]>([]);
+  const [showWelcome, setShowWelcome] = useState(() => {
+    // Synchronous check — prevents flash by deciding BEFORE first render
+    // Only show if user hasn't seen it today; mark immediately to block re-triggers
+    if (shouldShowDailyWelcome()) {
+      markDailyWelcomeSeen();
+      return true;
+    }
+    return false;
+  });
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(false);
   const [addType, setAddType] = useState<"income" | "expense">("income");
   const [txLoading, setTxLoading] = useState(false);
   const [insights, setInsights] = useState<AIInsight[]>([]);
@@ -65,14 +72,7 @@ const Dashboard = () => {
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
 
-  // Show daily welcome screen once per day after data loads
-  // markDailyWelcomeSeen() is called immediately to prevent re-showing on refresh
-  useEffect(() => {
-    if (!authLoading && !bizLoading && user && activeBusiness && shouldShowDailyWelcome()) {
-      markDailyWelcomeSeen(); // mark BEFORE showing so refresh won't re-trigger
-      setShowWelcome(true);
-    }
-  }, [authLoading, bizLoading, user, activeBusiness]);
+  
 
   if (authLoading || bizLoading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" /></div>;
@@ -106,46 +106,34 @@ const Dashboard = () => {
           onDismiss={() => setShowWelcome(false)}
         />
       )}
+
       {/* Daily Money Challenge — top of page, always visible */}
       <div className="mb-6">
         <DailyChallenge transactions={transactions} />
       </div>
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
-        <div>
-          <h1 className="font-display text-2xl md:text-3xl font-bold">
-            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"},{" "}
-            <span className="text-gradient">{user.name.split(" ")[0]}</span> 👋
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">{activeBusiness.name} · {activeBusiness.type}</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="hero-outline" size="sm" className="rounded-full gap-2" onClick={() => setShowBulkModal(true)}>
-            <Layers size={15} /> Bulk Entry
-          </Button>
-          <Button variant="hero-outline" size="sm" className="rounded-full gap-2" onClick={() => { setAddType("expense"); setShowAddModal(true); }}>
-            <ArrowDownRight size={15} /> Add Expense
-          </Button>
-          <Button variant="hero" size="sm" className="rounded-full gap-2" onClick={() => { setAddType("income"); setShowAddModal(true); }}>
-            <Plus size={15} /> Add Income
-          </Button>
-        </div>
+      <div className="mb-6">
+        <h1 className="font-display text-2xl md:text-3xl font-bold">
+          Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"},{" "}
+          <span className="text-gradient">{user.name.split(" ")[0]}</span> 👋
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">{activeBusiness.name} · {activeBusiness.type}</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+      {/* Financial Overview */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         {[
           { label: "Total Income", value: `₦${income.toLocaleString()}`, icon: ArrowUpRight, color: "text-emerald-600", bg: "bg-emerald-50" },
           { label: "Total Expenses", value: `₦${expenses.toLocaleString()}`, icon: ArrowDownRight, color: "text-red-500", bg: "bg-red-50" },
           { label: "Net Profit", value: `${profit >= 0 ? "+" : ""}₦${profit.toLocaleString()}`, icon: TrendingUp, color: profit >= 0 ? "text-emerald-600" : "text-red-500", bg: profit >= 0 ? "bg-emerald-50" : "bg-red-50" },
-          { label: "Profit Margin", value: `${margin.toFixed(1)}%`, icon: Activity, color: margin >= 20 ? "text-emerald-600" : "text-amber-600", bg: margin >= 20 ? "bg-emerald-50" : "bg-amber-50" },
+          { label: "Health Score", value: `${health.score}/100`, icon: Activity, color: health.color, bg: health.score >= 65 ? "bg-emerald-50" : health.score >= 45 ? "bg-amber-50" : "bg-red-50" },
         ].map(s => (
-          <div key={s.label} className="rounded-2xl border bg-card p-3 md:p-5 space-y-2 md:space-y-3 shadow-md">
+          <div key={s.label} className="rounded-2xl border bg-card p-3 md:p-5 space-y-2 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground font-medium leading-tight">{s.label}</p>
-              <div className={`w-10 h-10 rounded-2xl ${s.bg} flex items-center justify-center shrink-0`}>
-                <s.icon size={16} className={s.color} />
+              <div className={`w-9 h-9 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
+                <s.icon size={15} className={s.color} />
               </div>
             </div>
             <p className={`text-xl md:text-2xl font-bold font-display ${s.color} break-all leading-tight`}>{s.value}</p>
@@ -153,11 +141,9 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* Daily Truth Engine */}
+      {/* Today's Snapshot */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-display font-semibold text-sm text-muted-foreground uppercase tracking-wide">Today's Business Snapshot</h2>
-        </div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Today's Snapshot</p>
         <TruthEngine
           transactions={transactions}
           inventoryItems={inventoryItems}
@@ -176,7 +162,7 @@ const Dashboard = () => {
             <div className="flex items-center gap-2 mb-4">
               <Lightbulb size={16} className="text-primary" />
               <h2 className="font-display font-semibold">AI Insights</h2>
-              {insightsLoading && <span className="text-xs text-muted-foreground ml-auto animate-pulse">AI is thinking…</span>}
+              {insightsLoading && <span className="text-xs text-muted-foreground ml-auto animate-pulse">Thinking…</span>}
             </div>
             <div className="space-y-3">
               {insightsLoading && insights.length === 0 ? (
@@ -197,10 +183,13 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Recent transactions */}
+          {/* Recent Activity */}
           <div className="rounded-2xl border bg-card p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display font-semibold">Recent Transactions</h2>
+              <div className="flex items-center gap-2">
+                <Clock size={16} className="text-primary" />
+                <h2 className="font-display font-semibold">Recent Activity</h2>
+              </div>
               <button onClick={() => navigate("/history")} className="text-xs text-primary hover:underline">View all</button>
             </div>
             {txLoading ? (
@@ -235,18 +224,17 @@ const Dashboard = () => {
 
         {/* Right col */}
         <div className="lg:col-span-1 space-y-6">
-          {/* Health score */}
+          {/* Business Health */}
           <div className="rounded-2xl border bg-card p-5">
             <div className="flex items-center gap-2 mb-4">
               <Activity size={16} className="text-primary" />
               <h2 className="font-display font-semibold">Business Health</h2>
             </div>
             <div className="text-center py-2">
-              <div className="relative w-28 h-28 mx-auto mb-3">
+              <div className="relative w-24 h-24 mx-auto mb-3">
                 <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
                   <circle cx="50" cy="50" r="40" fill="none" stroke="hsl(var(--muted))" strokeWidth="10" />
-                  <circle
-                    cx="50" cy="50" r="40" fill="none"
+                  <circle cx="50" cy="50" r="40" fill="none"
                     stroke={health.score >= 65 ? "#10b981" : health.score >= 45 ? "#f59e0b" : "#ef4444"}
                     strokeWidth="10"
                     strokeDasharray={`${(health.score / 100) * 251.2} 251.2`}
@@ -266,78 +254,70 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Quick actions */}
+          {/* Inventory Summary */}
           <div className="rounded-2xl border bg-card p-5">
-            <h2 className="font-display font-semibold mb-4">Quick Actions</h2>
-            <div className="space-y-2">
-              {[
-                { label: "Add Income", desc: "Record a sale", icon: ArrowUpRight, color: "emerald", action: () => { setAddType("income"); setShowAddModal(true); } },
-                { label: "Add Expense", desc: "Log a cost", icon: ArrowDownRight, color: "red", action: () => { setAddType("expense"); setShowAddModal(true); } },
-                { label: "View Analytics", desc: "See your trends", icon: BarChart3, color: "blue", action: () => navigate("/analytics") },
-                { label: "AI Chat", desc: "Ask your advisor", icon: MessageSquare, color: "purple", action: () => navigate("/chat") },
-              ].map(a => (
-                <div
-                  key={a.label}
-                  onClick={a.action}
-                  className="flex items-center gap-3 p-3 rounded-2xl border bg-card cursor-pointer hover:bg-muted/60 hover:scale-[1.02] hover:shadow-md transition-all duration-200"
-                >
-                  <div className={`w-9 h-9 rounded-xl bg-${a.color}-100 flex items-center justify-center shrink-0`}>
-                    <a.icon size={16} className={`text-${a.color}-600`} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">{a.label}</p>
-                    <p className="text-xs text-muted-foreground">{a.desc}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Package size={16} className="text-primary" />
+                <h2 className="font-display font-semibold">Inventory</h2>
+              </div>
+              <button onClick={() => navigate("/inventory")} className="text-xs text-primary hover:underline">Manage →</button>
             </div>
-          </div>
-
-          {/* Inventory summary — always visible */}
-          {inventoryItems.length > 0 && (() => {
-            const stockValue = inventoryItems.filter(i => i.item_type !== "service").reduce((s, i) => s + (i.quantity ?? 0) * (i.cost_price ?? 0), 0);
-            const lowCount = inventoryItems.filter(i => i.status === "low_stock").length;
-            const outCount = inventoryItems.filter(i => i.status === "out_of_stock").length;
-            // Best seller = item with highest selling price × quantity (proxy for value)
-            const bestSeller = [...inventoryItems].sort((a, b) => (b.selling_price * (b.quantity ?? 0)) - (a.selling_price * (a.quantity ?? 0)))[0];
-            return (
-              <div className="rounded-2xl border bg-card p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Package size={16} className="text-primary" />
-                    <h2 className="font-display font-semibold">Inventory</h2>
-                  </div>
-                  <button onClick={() => navigate("/inventory")} className="text-xs text-primary hover:underline">Manage →</button>
-                </div>
-                <div className="space-y-2.5">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Stock value</span>
-                    <span className="font-bold text-emerald-600">₦{stockValue.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total items</span>
-                    <span className="font-semibold">{inventoryItems.length}</span>
-                  </div>
-                  {bestSeller && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Top item</span>
-                      <span className="font-semibold truncate max-w-[120px]">{bestSeller.name}</span>
+            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+              Track your products, monitor stock levels, and manage inventory efficiently.
+            </p>
+            {inventoryItems.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-xs text-muted-foreground mb-2">No products added yet.</p>
+                <button onClick={() => navigate("/inventory")} className="text-xs text-primary hover:underline">Add your first product →</button>
+              </div>
+            ) : (() => {
+              const stockValue = inventoryItems.filter(i => i.item_type !== "service").reduce((s, i) => s + (i.quantity ?? 0) * (i.cost_price ?? 0), 0);
+              const lowCount = inventoryItems.filter(i => i.status === "low_stock").length;
+              const outCount = inventoryItems.filter(i => i.status === "out_of_stock").length;
+              const recentItems = [...inventoryItems]
+                .sort((a, b) => new Date(b.updated_at ?? b.created_at).getTime() - new Date(a.updated_at ?? a.created_at).getTime())
+                .slice(0, 3);
+              return (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-muted/40 px-3 py-2.5 text-center">
+                      <p className="text-lg font-bold font-display">{inventoryItems.length}</p>
+                      <p className="text-[10px] text-muted-foreground">Total Products</p>
                     </div>
-                  )}
+                    <div className="rounded-xl bg-emerald-50 px-3 py-2.5 text-center">
+                      <p className="text-lg font-bold font-display text-emerald-600">₦{stockValue.toLocaleString()}</p>
+                      <p className="text-[10px] text-muted-foreground">Stock Value</p>
+                    </div>
+                  </div>
                   {(lowCount > 0 || outCount > 0) && (
-                    <div className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl mt-1 ${outCount > 0 ? "bg-red-50 text-red-600 border border-red-200" : "bg-amber-50 text-amber-600 border border-amber-200"}`}>
+                    <div className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl ${outCount > 0 ? "bg-red-50 text-red-600 border border-red-200" : "bg-amber-50 text-amber-600 border border-amber-200"}`}>
                       <AlertTriangle size={12} />
                       {outCount > 0 ? `${outCount} item${outCount > 1 ? "s" : ""} out of stock` : `${lowCount} item${lowCount > 1 ? "s" : ""} running low`}
                     </div>
                   )}
+                  {recentItems.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Recently Updated</p>
+                      <div className="space-y-1.5">
+                        {recentItems.map(item => (
+                          <div key={item.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-lg bg-muted/30">
+                            <span className="truncate font-medium max-w-[120px]">{item.name}</span>
+                            <span className={`font-semibold shrink-0 ml-2 ${item.status === "out_of_stock" ? "text-red-500" : item.status === "low_stock" ? "text-amber-600" : "text-emerald-600"}`}>
+                              {item.item_type === "service" ? "Service" : `${item.quantity ?? 0} left`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
+          </div>
         </div>
       </div>
 
-      {/* Add transaction modal */}
       {showAddModal && (
         <AddTransactionModal
           businessId={activeBusiness.id}
@@ -346,7 +326,6 @@ const Dashboard = () => {
           onSaved={loadTransactions}
         />
       )}
-
       {showBulkModal && (
         <BulkInputModal
           businessId={activeBusiness.id}

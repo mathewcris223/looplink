@@ -6,7 +6,7 @@ interface BusinessContextType {
   businesses: Business[];
   activeBusiness: Business | null;
   setActiveBusiness: (b: Business) => void;
-  refreshBusinesses: () => Promise<void>;
+  refreshBusinesses: (selectNewest?: boolean) => Promise<void>;
   loading: boolean;
 }
 
@@ -18,7 +18,7 @@ export const BusinessProvider = ({ children }: { children: ReactNode }) => {
   const [activeBusiness, setActiveBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshBusinesses = async () => {
+  const refreshBusinesses = async (selectNewest = false) => {
     if (!user) {
       setBusinesses([]);
       setActiveBusiness(null);
@@ -29,9 +29,16 @@ export const BusinessProvider = ({ children }: { children: ReactNode }) => {
     try {
       const list = await getBusinesses();
       setBusinesses(list);
-      const savedId = localStorage.getItem("ll_active_biz");
-      const found = list.find(b => b.id === savedId) ?? list[0] ?? null;
-      setActiveBusiness(found);
+      if (selectNewest && list.length > 0) {
+        // After creating a new business, select the most recently created one
+        const newest = list[list.length - 1];
+        setActiveBusiness(newest);
+        localStorage.setItem("ll_active_biz", newest.id);
+      } else {
+        const savedId = localStorage.getItem("ll_active_biz");
+        const found = list.find(b => b.id === savedId) ?? list[0] ?? null;
+        setActiveBusiness(found);
+      }
     } catch {
       // Supabase not ready yet
     } finally {

@@ -1,34 +1,34 @@
-import { BarChart3, Brain, HeartPulse, Lightbulb } from "lucide-react";
+import { BarChart3, Bot, Package, Flame } from "lucide-react";
 import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 
 const features = [
   {
     icon: BarChart3,
-    title: "Smart Daily Tracking",
-    desc: "Record sales and expenses in seconds. No spreadsheets, no stress.",
+    title: "Smart Accounting",
+    desc: "Track income and expenses with ease and understand your business performance.",
     color: "from-emerald-500/20 to-emerald-500/5",
     iconColor: "text-emerald-500",
   },
   {
-    icon: Lightbulb,
-    title: "Instant Business Insights",
-    desc: "Get clear, plain-language advice on how to improve your business every day.",
-    color: "from-amber-500/20 to-amber-500/5",
-    iconColor: "text-amber-500",
-  },
-  {
-    icon: Brain,
-    title: "AI-Powered Suggestions",
-    desc: "Know exactly what to do next to increase profit — powered by AI.",
+    icon: Bot,
+    title: "AI Chat Assistant",
+    desc: "Ask questions about your business and get instant intelligent insights.",
     color: "from-violet-500/20 to-violet-500/5",
     iconColor: "text-violet-500",
   },
   {
-    icon: HeartPulse,
-    title: "Business Health Score",
-    desc: "See your business performance at a glance with a simple health score.",
-    color: "from-rose-500/20 to-rose-500/5",
-    iconColor: "text-rose-500",
+    icon: Package,
+    title: "Inventory Management",
+    desc: "Monitor stock, manage products, and avoid running out of items.",
+    color: "from-blue-500/20 to-blue-500/5",
+    iconColor: "text-blue-500",
+  },
+  {
+    icon: Flame,
+    title: "Daily Money Challenge",
+    desc: "Improve your financial knowledge daily and build smart money habits.",
+    color: "from-amber-500/20 to-amber-500/5",
+    iconColor: "text-amber-500",
   },
 ];
 
@@ -59,16 +59,25 @@ const FeaturesSection = () => {
           </span>
           <h2 className="font-display text-3xl md:text-4xl font-bold">
             Everything you need to{" "}
-            <span className="text-gradient">grow smarter</span>
+            <span className="text-gradient">run your business</span>
           </h2>
           <p className="text-muted-foreground max-w-sm mx-auto">
-            Powerful tools designed to make business management effortless.
+            Powerful tools built for real business owners — simple, mobile-friendly, and easy to use.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
+        <div className="grid sm:grid-cols-2 gap-5 max-w-3xl mx-auto mb-10">
           {features.map((f, i) => (
             <FeatureCard key={f.title} f={f} i={i} />
+          ))}
+        </div>
+
+        {/* Benefits row */}
+        <div className="flex flex-wrap justify-center gap-4 max-w-2xl mx-auto">
+          {["Easy to use", "Mobile friendly", "Built for real business owners"].map(b => (
+            <div key={b} className="flex items-center gap-2 bg-card border rounded-full px-4 py-2 text-sm font-medium shadow-sm">
+              <span className="text-emerald-500">✓</span> {b}
+            </div>
           ))}
         </div>
       </div>

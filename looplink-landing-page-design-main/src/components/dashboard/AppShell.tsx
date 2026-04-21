@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
 import AddBusinessModal from "@/components/dashboard/AddBusinessModal";
-import BulkInputModal from "@/components/dashboard/BulkInputModal";
+import SmartAddModal from "@/components/dashboard/SmartAddModal";
 import {
   LayoutDashboard, BarChart3, Brain, History,
   LogOut, Menu, X, ChevronDown, Plus, Building2, MessageSquare, Package, Zap, MoreHorizontal
@@ -35,7 +35,7 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [bizDropdown, setBizDropdown] = useState(false);
   const [showAddBiz, setShowAddBiz] = useState(false);
-  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showSmartAdd, setShowSmartAdd] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
 
   const handleLogout = async () => { await logout(); navigate("/"); };
@@ -145,19 +145,14 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Mobile topbar */}
-        <header className="md:hidden border-b bg-card/95 backdrop-blur sticky top-0 z-40 px-4 h-14 flex items-center justify-between shrink-0">
-          <button onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-xl hover:bg-muted transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
-            <Menu size={19} />
-          </button>
+        {/* Mobile topbar — no hamburger, just logo */}
+        <header className="md:hidden border-b bg-card/95 backdrop-blur sticky top-0 z-40 px-4 h-14 flex items-center justify-center shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-lg bg-gradient-brand flex items-center justify-center">
               <Zap size={12} className="text-white" />
             </div>
             <span className="font-display font-bold text-sm">LoopLink</span>
           </div>
-          <div className="w-10" />
         </header>
 
         <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto overflow-x-hidden pb-28 md:pb-0">
@@ -192,7 +187,7 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
             </Link>
 
             {/* Center Add button — prominent */}
-            <button onClick={() => setShowBulkModal(true)}
+            <button onClick={() => setShowSmartAdd(true)}
               className="flex flex-col items-center gap-0.5 -mt-4 min-w-[56px] min-h-[56px] justify-center">
               <div className="w-14 h-14 rounded-2xl bg-gradient-brand flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform">
                 <Plus size={26} className="text-white" strokeWidth={2.5} />
@@ -235,6 +230,8 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
               <div className="px-5 py-3 border-b">
                 <p className="font-display font-bold text-base">More</p>
               </div>
+
+              {/* Nav links */}
               <div className="p-4 grid grid-cols-3 gap-3">
                 {[
                   { path: "/analytics", icon: BarChart3, label: "Analytics", color: "bg-blue-50 text-blue-600" },
@@ -250,13 +247,47 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
                   </Link>
                 ))}
               </div>
-              <div className="px-4 pb-6 space-y-2">
-                <button onClick={() => { setShowAddBiz(true); setShowMoreSheet(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border hover:bg-muted transition-colors text-sm font-medium">
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <Plus size={18} className="text-primary" />
+
+              {/* Business switcher */}
+              <div className="px-4 pb-2">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Your Businesses</p>
+                <div className="space-y-1.5">
+                  {businesses.map(b => (
+                    <button key={b.id}
+                      onClick={() => { onSelectBusiness(b); setShowMoreSheet(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-colors text-sm font-medium ${
+                        activeBusiness?.id === b.id
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "hover:bg-muted"
+                      }`}>
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeBusiness?.id === b.id ? "bg-primary/10" : "bg-muted"}`}>
+                        <Building2 size={15} className={activeBusiness?.id === b.id ? "text-primary" : "text-muted-foreground"} />
+                      </div>
+                      <span className="truncate flex-1 text-left">{b.name}</span>
+                      {activeBusiness?.id === b.id && (
+                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold shrink-0">Active</span>
+                      )}
+                    </button>
+                  ))}
+                  <button onClick={() => { setShowAddBiz(true); setShowMoreSheet(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed hover:bg-muted transition-colors text-sm font-medium text-muted-foreground">
+                    <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                      <Plus size={15} />
+                    </div>
+                    Add New Business
+                  </button>
+                </div>
+              </div>
+
+              {/* Logout */}
+              <div className="px-4 pb-8 pt-2">
+                <button
+                  onClick={() => { setShowMoreSheet(false); handleLogout(); }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-sm font-semibold text-red-600">
+                  <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center">
+                    <LogOut size={17} className="text-red-600" />
                   </div>
-                  Add Business
+                  Log Out
                 </button>
               </div>
             </div>
@@ -269,18 +300,18 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
         <AddBusinessModal
           onClose={() => setShowAddBiz(false)}
           onCreated={async () => {
-            await refreshBusinesses();
+            await refreshBusinesses(true); // select the newly created business
             setShowAddBiz(false);
           }}
         />
       )}
 
-      {/* Bulk Input Modal from bottom nav */}
-      {showBulkModal && activeBusiness && (
-        <BulkInputModal
+      {/* Smart Add Modal from bottom nav */}
+      {showSmartAdd && activeBusiness && (
+        <SmartAddModal
           businessId={activeBusiness.id}
-          onClose={() => setShowBulkModal(false)}
-          onSaved={() => setShowBulkModal(false)}
+          onClose={() => setShowSmartAdd(false)}
+          onSaved={() => setShowSmartAdd(false)}
         />
       )}
     </div>

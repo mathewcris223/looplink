@@ -141,14 +141,13 @@ const HeroSection = () => {
 
           {/* Headline */}
           <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight">
-            Understand Your Business.{" "}
-            <span className="text-shimmer">Grow Your Profit.</span>
+            Smart Accounting &{" "}
+            <span className="text-shimmer">Business Management Made Simple</span>
           </h1>
 
           {/* Sub */}
           <p className="text-lg text-muted-foreground max-w-lg mx-auto lg:mx-0 leading-relaxed">
-            LoopLink tracks your daily sales and expenses, detects hidden problems, and gives you
-            clear AI-powered advice to grow your profit — without the stress.
+            Track your income, manage expenses, control inventory, and get AI-powered insights — all in one place.
           </p>
 
           {/* CTAs */}
