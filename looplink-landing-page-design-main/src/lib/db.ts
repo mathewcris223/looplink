@@ -413,6 +413,18 @@ export async function updateInventoryStock(itemId: string, additionalQuantity: n
   return data as InventoryItem;
 }
 
+// ── Business Deletion ─────────────────────────────────────────────────────────
+
+export async function deleteBusiness(businessId: string): Promise<void> {
+  const tables = ["inventory_losses", "inventory_sales", "inventory_items", "transactions"] as const;
+  for (const table of tables) {
+    const { error } = await supabase.from(table).delete().eq("business_id", businessId);
+    if (error) throw error;
+  }
+  const { error } = await supabase.from("businesses").delete().eq("id", businessId);
+  if (error) throw error;
+}
+
 // ── Legacy shims ──────────────────────────────────────────────────────────────
 
 export async function addInventoryItem(

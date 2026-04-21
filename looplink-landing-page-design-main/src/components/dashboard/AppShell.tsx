@@ -4,9 +4,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
 import AddBusinessModal from "@/components/dashboard/AddBusinessModal";
 import SmartAddModal from "@/components/dashboard/SmartAddModal";
+import DeleteBusinessModal from "@/components/dashboard/DeleteBusinessModal";
 import {
   LayoutDashboard, BarChart3, Brain, History,
-  LogOut, Menu, X, ChevronDown, Plus, Building2, MessageSquare, Package, Zap, MoreHorizontal
+  LogOut, Menu, X, ChevronDown, Plus, Building2, MessageSquare, Package, Zap, MoreHorizontal, Trash2
 } from "lucide-react";
 import { Business } from "@/lib/db";
 import { useInventory } from "@/context/InventoryContext";
@@ -19,11 +20,11 @@ interface AppShellProps {
 }
 
 const navItems = [
-  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/analytics", icon: BarChart3, label: "Analytics" },
+  { path: "/home", icon: LayoutDashboard, label: "Home" },
+  { path: "/dashboard", icon: BarChart3, label: "Dashboard" },
   { path: "/inventory", icon: Package, label: "Inventory" },
-  { path: "/coach", icon: Brain, label: "AI Coach" },
   { path: "/chat", icon: MessageSquare, label: "AI Chat" },
+  { path: "/learn", icon: Brain, label: "Learn" },
   { path: "/history", icon: History, label: "History" },
 ];
 
@@ -37,6 +38,7 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
   const [showAddBiz, setShowAddBiz] = useState(false);
   const [showSmartAdd, setShowSmartAdd] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
+  const [showDeleteBiz, setShowDeleteBiz] = useState(false);
 
   const handleLogout = async () => { await logout(); navigate("/"); };
 
@@ -159,31 +161,27 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
           {children}
         </main>
 
-        {/* Bottom Nav — mobile only, always visible */}
+        {/* Bottom Nav — mobile only, 5 tabs: Home, Dashboard, Add, AI, Learn */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border/60 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
           style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           <div className="flex items-center justify-around px-1 pt-1 pb-1.5">
 
             {/* Home */}
-            <Link to="/dashboard"
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[56px] min-h-[52px] justify-center ${
-                location.pathname === "/dashboard"
-                  ? "text-primary bg-primary/10"
-                  : "text-muted-foreground active:bg-muted"
+            <Link to="/home"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
+                location.pathname === "/home" ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
               }`}>
-              <LayoutDashboard size={22} strokeWidth={location.pathname === "/dashboard" ? 2.5 : 1.8} />
+              <LayoutDashboard size={22} strokeWidth={location.pathname === "/home" ? 2.5 : 1.8} />
               <span className="text-[10px] font-semibold tracking-tight">Home</span>
             </Link>
 
-            {/* Inventory */}
-            <Link to="/inventory"
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[56px] min-h-[52px] justify-center ${
-                location.pathname === "/inventory"
-                  ? "text-primary bg-primary/10"
-                  : "text-muted-foreground active:bg-muted"
+            {/* Dashboard */}
+            <Link to="/dashboard"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
+                location.pathname === "/dashboard" || location.pathname === "/analytics" ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
               }`}>
-              <Package size={22} strokeWidth={location.pathname === "/inventory" ? 2.5 : 1.8} />
-              <span className="text-[10px] font-semibold tracking-tight">Inventory</span>
+              <BarChart3 size={22} strokeWidth={location.pathname === "/dashboard" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold tracking-tight">Dashboard</span>
             </Link>
 
             {/* Center Add button — prominent */}
@@ -195,27 +193,23 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
               <span className="text-[10px] font-semibold tracking-tight text-muted-foreground mt-0.5">Add</span>
             </button>
 
-            {/* Chat */}
+            {/* AI Chat */}
             <Link to="/chat"
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[56px] min-h-[52px] justify-center ${
-                location.pathname === "/chat"
-                  ? "text-primary bg-primary/10"
-                  : "text-muted-foreground active:bg-muted"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
+                location.pathname === "/chat" ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
               }`}>
               <MessageSquare size={22} strokeWidth={location.pathname === "/chat" ? 2.5 : 1.8} />
-              <span className="text-[10px] font-semibold tracking-tight">AI Chat</span>
+              <span className="text-[10px] font-semibold tracking-tight">AI</span>
             </Link>
 
-            {/* More */}
-            <button onClick={() => setShowMoreSheet(true)}
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[56px] min-h-[52px] justify-center ${
-                ["/analytics", "/history", "/coach"].includes(location.pathname)
-                  ? "text-primary bg-primary/10"
-                  : "text-muted-foreground active:bg-muted"
+            {/* Learn */}
+            <Link to="/learn"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
+                location.pathname === "/learn" || location.pathname === "/coach" ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
               }`}>
-              <MoreHorizontal size={22} strokeWidth={1.8} />
-              <span className="text-[10px] font-semibold tracking-tight">More</span>
-            </button>
+              <Brain size={22} strokeWidth={location.pathname === "/learn" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold tracking-tight">Learn</span>
+            </Link>
           </div>
         </nav>
 
@@ -279,8 +273,18 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
                 </div>
               </div>
 
-              {/* Logout */}
-              <div className="px-4 pb-8 pt-2">
+              {/* Actions */}
+              <div className="px-4 pb-8 pt-2 space-y-2">
+                {activeBusiness && (
+                  <button
+                    onClick={() => { setShowMoreSheet(false); setShowDeleteBiz(true); }}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-red-200 hover:bg-red-50 transition-colors text-sm font-semibold text-red-600">
+                    <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center">
+                      <Trash2 size={17} className="text-red-600" />
+                    </div>
+                    Delete Business
+                  </button>
+                )}
                 <button
                   onClick={() => { setShowMoreSheet(false); handleLogout(); }}
                   className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-sm font-semibold text-red-600">
@@ -312,6 +316,19 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
           businessId={activeBusiness.id}
           onClose={() => setShowSmartAdd(false)}
           onSaved={() => setShowSmartAdd(false)}
+        />
+      )}
+
+      {/* Delete Business Modal */}
+      {showDeleteBiz && activeBusiness && (
+        <DeleteBusinessModal
+          business={activeBusiness}
+          onClose={() => setShowDeleteBiz(false)}
+          onDeleted={() => {
+            setShowDeleteBiz(false);
+            setShowMoreSheet(false);
+            navigate("/onboarding");
+          }}
         />
       )}
     </div>

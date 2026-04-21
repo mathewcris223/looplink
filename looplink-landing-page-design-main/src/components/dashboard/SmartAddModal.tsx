@@ -34,7 +34,7 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<unknown>(null);
 
   // ── Voice input ──────────────────────────────────────────────────────────
   const startListening = () => {
@@ -61,7 +61,7 @@ const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
   };
 
   const stopListening = () => {
-    recognitionRef.current?.stop();
+    (recognitionRef.current as { stop?: () => void })?.stop?.();
     setListening(false);
   };
 

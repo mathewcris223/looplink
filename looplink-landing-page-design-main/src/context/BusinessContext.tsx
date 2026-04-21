@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { Business, getBusinesses } from "@/lib/db";
+import { Business, getBusinesses, deleteBusiness as dbDeleteBusiness } from "@/lib/db";
 import { useAuth } from "./AuthContext";
 
 interface BusinessContextType {
@@ -7,6 +7,7 @@ interface BusinessContextType {
   activeBusiness: Business | null;
   setActiveBusiness: (b: Business) => void;
   refreshBusinesses: (selectNewest?: boolean) => Promise<void>;
+  deleteBusiness: (id: string) => Promise<void>;
   loading: boolean;
 }
 
@@ -56,8 +57,21 @@ export const BusinessProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem("ll_active_biz", b.id);
   };
 
+  const handleDeleteBusiness = async (id: string) => {
+    await dbDeleteBusiness(id); // throws on failure — do not mutate state
+    const newList = businesses.filter(b => b.id !== id);
+    const newActive = newList[0] ?? null;
+    if (newActive) {
+      localStorage.setItem("ll_active_biz", newActive.id);
+    } else {
+      localStorage.removeItem("ll_active_biz");
+    }
+    setBusinesses(newList);
+    setActiveBusiness(newActive);
+  };
+
   return (
-    <BusinessContext.Provider value={{ businesses, activeBusiness, setActiveBusiness: handleSetActive, refreshBusinesses, loading }}>
+    <BusinessContext.Provider value={{ businesses, activeBusiness, setActiveBusiness: handleSetActive, refreshBusinesses, deleteBusiness: handleDeleteBusiness, loading }}>
       {children}
     </BusinessContext.Provider>
   );
