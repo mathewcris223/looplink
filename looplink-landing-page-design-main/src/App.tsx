@@ -22,6 +22,7 @@ import Inventory from "./pages/Inventory.tsx";
 import Learn from "./pages/Learn.tsx";
 import AIHub from "./pages/AIHub.tsx";
 import ManageBusinesses from "./pages/ManageBusinesses.tsx";
+import LogoPreview from "./pages/LogoPreview.tsx";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ const App = () => (
                 <Route path="/learn" element={<Learn />} />
                 <Route path="/ai" element={<AIHub />} />
                 <Route path="/businesses" element={<ManageBusinesses />} />
+                <Route path="/logo-preview" element={<LogoPreview />} />
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

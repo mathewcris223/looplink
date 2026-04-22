@@ -42,7 +42,7 @@ const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string;
 const MODEL = "llama-3.3-70b-versatile";
 const BASE_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-const SYSTEM_PROMPT = `You are a smart business advisor for LoopLink, a financial tracking app for small business owners in Nigeria.
+const SYSTEM_PROMPT = `You are a smart business advisor for Aje, a financial tracking app for small business owners in Nigeria.
 
 Your role:
 - Give practical, actionable business advice based on the user's real financial data

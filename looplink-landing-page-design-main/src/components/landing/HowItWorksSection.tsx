@@ -10,7 +10,7 @@ const steps = [
   },
   {
     icon: LineChart,
-    title: "LoopLink Analyzes",
+    title: "Aje Analyzes",
     desc: "Our AI instantly processes your data and identifies patterns, trends, and problems.",
     number: "02",
   },

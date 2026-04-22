@@ -3,24 +3,24 @@ import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 
 const faqs = [
   {
-    q: "Do I need accounting knowledge to use LoopLink?",
-    a: "Not at all. LoopLink is built for everyday business owners, not accountants. Just enter your daily sales and expenses — we handle all the analysis and give you plain-language advice.",
+    q: "Do I need accounting knowledge to use Aje?",
+    a: "Not at all. Aje is built for everyday business owners, not accountants. Just enter your daily sales and expenses — we handle all the analysis and give you plain-language advice.",
   },
   {
-    q: "Is LoopLink free?",
+    q: "Is Aje free?",
     a: "Yes! You can get started completely free. We offer a generous free plan, and premium features are available for businesses that want deeper insights and advanced AI recommendations.",
   },
   {
-    q: "How exactly does LoopLink help my business?",
-    a: "LoopLink analyzes your daily data, spots problems like overspending or declining sales, and gives you specific, actionable steps to improve. Think of it as a business advisor in your pocket.",
+    q: "How exactly does Aje help my business?",
+    a: "Aje analyzes your daily data, spots problems like overspending or declining sales, and gives you specific, actionable steps to improve. Think of it as a business advisor in your pocket.",
   },
   {
     q: "Can I use it for any type of business?",
-    a: "Absolutely. Whether you run a market stall, a shop, freelance, or manage a growing team — LoopLink adapts to your business type and size.",
+    a: "Absolutely. Whether you run a market stall, a shop, freelance, or manage a growing team — Aje adapts to your business type and size.",
   },
   {
-    q: "How is LoopLink different from a spreadsheet or accounting app?",
-    a: "Spreadsheets and accounting apps show you numbers. LoopLink tells you what those numbers mean and what to do about them. It's the difference between data and decisions.",
+    q: "How is Aje different from a spreadsheet or accounting app?",
+    a: "Spreadsheets and accounting apps show you numbers. Aje tells you what those numbers mean and what to do about them. It's the difference between data and decisions.",
   },
   {
     q: "Is my business data safe?",
@@ -45,7 +45,7 @@ const FAQSection = () => {
             Got <span className="text-gradient">questions?</span>
           </h2>
           <p className="text-muted-foreground text-lg">
-            Everything you need to know about LoopLink.
+            Everything you need to know about Aje.
           </p>
         </div>
 

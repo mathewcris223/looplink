@@ -42,7 +42,7 @@ const Login = () => {
   return (
     <AuthLayout
       title="Welcome back"
-      subtitle="Log in to your LoopLink account"
+      subtitle="Log in to your Aje account"
       footer={
         <>
           Don't have an account?{" "}

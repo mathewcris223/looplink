@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { LayoutDashboard, MessageSquare, Receipt, Package, ArrowRight, Zap, X } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Receipt, Package, ArrowRight, X } from "lucide-react";
+import AjeLogo from "@/components/ui/AjeLogo";
 
 interface Props {
   userName: string;
@@ -95,10 +96,7 @@ const DailyWelcome = ({ userName, onDismiss }: Props) => {
         {/* Header */}
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-brand flex items-center justify-center">
-              <Zap size={14} className="text-white" />
-            </div>
-            <span className="font-display font-bold text-base text-gradient">LoopLink</span>
+            <AjeLogo variant="dark" size={24} />
           </div>
           <button onClick={handleSkip}
             className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">

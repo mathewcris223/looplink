@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { ReactNode } from "react";
+import AjeLogo from "@/components/ui/AjeLogo";
 
 interface AuthLayoutProps {
   title: string;
@@ -15,10 +16,10 @@ const AuthLayout = ({ title, subtitle, children, footer }: AuthLayoutProps) => (
     <div className="absolute bottom-1/4 -right-32 w-96 h-96 rounded-full bg-secondary/8 blur-[100px] pointer-events-none" />
 
     <div className="w-full max-w-md animate-fade-up">
-      {/* Logo */}
+      {/* Logo — centered above card, one instance */}
       <div className="text-center mb-8">
-        <Link to="/" className="font-display text-2xl font-bold text-gradient inline-block">
-          LoopLink
+        <Link to="/" className="inline-block">
+          <AjeLogo variant="dark" size={40} />
         </Link>
       </div>
 

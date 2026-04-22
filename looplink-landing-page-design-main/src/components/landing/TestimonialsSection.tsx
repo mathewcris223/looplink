@@ -10,7 +10,7 @@ const testimonials = [
     color: "from-emerald-500 to-teal-500",
   },
   {
-    quote: "I didn't know where my money was going until I used LoopLink. Now I make ₦15k more every week.",
+    quote: "I didn't know where my money was going until I used Aje. Now I make ₦15k more every week.",
     name: "Chioma N.",
     role: "Shop Owner",
     avatar: "CN",
@@ -67,7 +67,7 @@ const TestimonialsSection = () => {
             <span className="text-gradient">business owners</span>
           </h2>
           <p className="text-muted-foreground max-w-md mx-auto text-lg">
-            Real results from real people growing their businesses with LoopLink.
+            Real results from real people growing their businesses with Aje.
           </p>
         </div>
 

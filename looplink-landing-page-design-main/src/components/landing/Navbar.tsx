@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
+import AjeLogo from "@/components/ui/AjeLogo";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -17,7 +18,7 @@ const Navbar = () => {
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "glass shadow-sm border-b" : "bg-transparent border-transparent"}`}>
       <div className="container mx-auto flex items-center justify-between h-16 px-6">
-        <a href="#" className="font-display text-xl font-bold text-gradient">LoopLink</a>
+        <a href="#"><AjeLogo variant="dark" size={28} /></a>
         <div className="hidden md:flex items-center gap-8">
           <button onClick={() => navigate("/login")} className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200">Log in</button>
           <Button variant="hero" size="sm" className="rounded-full px-5" onClick={() => navigate("/signup")}>Get Started Free</Button>

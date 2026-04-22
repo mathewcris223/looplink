@@ -22,14 +22,14 @@ const ValueSection = () => {
         {/* Left */}
         <div ref={leftRef} className="section-reveal space-y-7">
           <span className="inline-block text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full tracking-wide uppercase">
-            Why LoopLink?
+            Why Aje?
           </span>
           <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
             Stop Guessing.{" "}
             <span className="text-gradient">Start Growing.</span>
           </h2>
           <p className="text-muted-foreground text-lg leading-relaxed">
-            Most business owners don't know why they're not making more money. LoopLink shows you
+            Most business owners don't know why they're not making more money. Aje shows you
             exactly what's happening and what to do about it.
           </p>
           <ul className="space-y-4">

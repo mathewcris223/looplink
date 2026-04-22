@@ -80,7 +80,7 @@ const Signup = () => {
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 flex items-center justify-center px-4">
         <div className="w-full max-w-lg animate-fade-up">
           <div className="text-center mb-8">
-            <span className="font-display text-2xl font-bold text-gradient">LoopLink</span>
+            <span className="font-display text-2xl font-bold text-gradient">Aje</span>
             <h1 className="font-display text-2xl font-bold mt-4 mb-1">Set up your business</h1>
             <p className="text-muted-foreground text-sm">This only takes a moment — you won't be asked again.</p>
             <div className="flex items-center justify-center gap-2 mt-3">

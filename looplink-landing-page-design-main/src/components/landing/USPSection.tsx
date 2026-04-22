@@ -3,7 +3,7 @@ import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 
 const comparisons = [
   { label: "Accounting apps", desc: "Show you what happened", icon: "📊" },
-  { label: "LoopLink", desc: "Tell you what to do next", icon: "🧠", highlight: true },
+  { label: "Aje", desc: "Tell you what to do next", icon: "🧠", highlight: true },
 ];
 
 const USPSection = () => {
@@ -58,10 +58,10 @@ const USPSection = () => {
           {/* Pull quote */}
           <div className="relative rounded-3xl border border-primary/20 bg-card/80 backdrop-blur p-8 max-w-2xl mx-auto shadow-xl">
             <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-brand text-primary-foreground text-xs font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
-              <Zap size={11} /> The LoopLink Promise
+              <Zap size={11} /> The Aje Promise
             </div>
             <p className="text-xl md:text-2xl font-display font-semibold leading-snug text-foreground">
-              "LoopLink tells you{" "}
+              "Aje tells you{" "}
               <span className="text-gradient font-bold">what to do</span> — not just what happened."
             </p>
             <div className="flex items-center justify-center gap-2 mt-4 text-sm text-muted-foreground">

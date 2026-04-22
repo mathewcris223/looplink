@@ -5,6 +5,7 @@ import { useBusiness } from "@/context/BusinessContext";
 import AddBusinessModal from "@/components/dashboard/AddBusinessModal";
 import SmartAddModal from "@/components/dashboard/SmartAddModal";
 import DeleteBusinessModal from "@/components/dashboard/DeleteBusinessModal";
+import AjeLogo from "@/components/ui/AjeLogo";
 import {
   LayoutDashboard, BarChart3, Brain, History,
   LogOut, Menu, X, ChevronDown, Plus, Building2, MessageSquare, Package, Zap, MoreHorizontal, Trash2
@@ -46,13 +47,9 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
+      {/* Logo — appears ONCE, top-left of sidebar */}
       <div className="px-5 pt-6 pb-5 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-brand flex items-center justify-center">
-            <Zap size={16} className="text-white" />
-          </div>
-          <span className="font-display text-lg font-bold text-white tracking-tight">LoopLink</span>
-        </div>
+        <AjeLogo variant="light" size={28} />
         <button className="md:hidden p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
           onClick={() => setSidebarOpen(false)}>
           <X size={16} />
@@ -148,15 +145,11 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Mobile topbar — logo center, manage businesses right */}
+        {/* Mobile topbar — logo centered, manage button right */}
         <header className="md:hidden border-b bg-card/95 backdrop-blur sticky top-0 z-40 px-4 h-14 flex items-center justify-between shrink-0">
           <div className="w-10" />
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-brand flex items-center justify-center">
-              <Zap size={12} className="text-white" />
-            </div>
-            <span className="font-display font-bold text-sm">LoopLink</span>
-          </div>
+          {/* Logo — centered, one instance */}
+          <AjeLogo variant="dark" size={26} />
           <button
             onClick={() => navigate("/businesses")}
             className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center active:bg-muted/80 transition-colors"

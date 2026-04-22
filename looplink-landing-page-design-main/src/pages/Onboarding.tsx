@@ -60,7 +60,7 @@ const Onboarding = () => {
       <div className="w-full max-w-2xl animate-fade-up">
         {/* Header */}
         <div className="text-center mb-10">
-          <span className="font-display text-2xl font-bold text-gradient">LoopLink</span>
+          <span className="font-display text-2xl font-bold text-gradient">Aje</span>
           <h1 className="font-display text-3xl font-bold mt-4 mb-2">
             Welcome, {user?.name?.split(" ")[0]} 👋
           </h1>

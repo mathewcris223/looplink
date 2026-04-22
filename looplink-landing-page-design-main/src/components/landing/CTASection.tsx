@@ -32,8 +32,7 @@ const CTASection = () => {
           </h2>
 
           <p className="text-muted-foreground text-lg max-w-xl mx-auto leading-relaxed">
-            Join thousands of business owners who stopped guessing and started growing with
-            LoopLink.
+            Join thousands of business owners who stopped guessing and started growing with Aje.
           </p>
 
           {/* CTA */}
