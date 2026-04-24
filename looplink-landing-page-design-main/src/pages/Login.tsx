@@ -26,7 +26,7 @@ const Login = () => {
       await login(form.email.trim(), form.password);
       // BusinessContext will load businesses automatically via onAuthStateChange
       // Dashboard handles the redirect to onboarding if no business exists
-      navigate("/home");
+      navigate("/today");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Login failed.";
       if (msg.includes("Invalid login credentials")) {

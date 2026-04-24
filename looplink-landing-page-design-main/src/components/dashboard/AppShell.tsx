@@ -2,16 +2,16 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
-import AddBusinessModal from "@/components/dashboard/AddBusinessModal";
+import FastAddModal from "@/components/dashboard/FastAddModal";
 import SmartAddModal from "@/components/dashboard/SmartAddModal";
-import DeleteBusinessModal from "@/components/dashboard/DeleteBusinessModal";
+import QuickSellModal from "@/components/dashboard/QuickSellModal";
+import AddBusinessModal from "@/components/dashboard/AddBusinessModal";
 import AjeLogo from "@/components/ui/AjeLogo";
 import {
-  LayoutDashboard, BarChart3, Brain, History,
-  LogOut, Menu, X, ChevronDown, Plus, Building2, MessageSquare, Package, Zap, MoreHorizontal, Trash2
+  Home, History, Package, Plus,
+  LogOut, X, ChevronDown, Building2, Settings, User
 } from "lucide-react";
 import { Business } from "@/lib/db";
-import { useInventory } from "@/context/InventoryContext";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -21,33 +21,32 @@ interface AppShellProps {
 }
 
 const navItems = [
-  { path: "/home", icon: LayoutDashboard, label: "Home" },
-  { path: "/dashboard", icon: BarChart3, label: "Dashboard" },
-  { path: "/inventory", icon: Package, label: "Inventory" },
-  { path: "/chat", icon: MessageSquare, label: "AI Chat" },
-  { path: "/learn", icon: Brain, label: "Learn" },
-  { path: "/businesses", icon: Building2, label: "Businesses" },
+  { path: "/today", icon: Home, label: "Money" },
+  { path: "/stock", icon: Package, label: "Stock" },
   { path: "/history", icon: History, label: "History" },
+  { path: "/settings", icon: Settings, label: "Settings" },
 ];
 
-const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: AppShellProps) => {
-  const { user, logout } = useAuth();
-  const { refreshBusinesses } = useBusiness();
+interface SidebarContentProps {
+  user: { name?: string; email?: string } | null;
+  businesses: Business[];
+  activeBusiness: Business | null;
+  onSelectBusiness: (b: Business) => void;
+  bizDropdown: boolean;
+  setBizDropdown: (v: boolean) => void;
+  setSidebarOpen: (v: boolean) => void;
+  setShowAddBiz: (v: boolean) => void;
+  handleLogout: () => void;
+}
+
+// Defined OUTSIDE AppShell to prevent remount on every render
+const SidebarContent = ({
+  user, businesses, activeBusiness, onSelectBusiness,
+  bizDropdown, setBizDropdown, setSidebarOpen, setShowAddBiz, handleLogout
+}: SidebarContentProps) => {
   const location = useLocation();
-  const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [bizDropdown, setBizDropdown] = useState(false);
-  const [showAddBiz, setShowAddBiz] = useState(false);
-  const [showSmartAdd, setShowSmartAdd] = useState(false);
-  const [showMoreSheet, setShowMoreSheet] = useState(false);
-  const [showDeleteBiz, setShowDeleteBiz] = useState(false);
-
-  const handleLogout = async () => { await logout(); navigate("/"); };
-
-  const SidebarContent = () => (
+  return (
     <div className="flex flex-col h-full">
-      {/* Logo */}
-      {/* Logo — appears ONCE, top-left of sidebar */}
       <div className="px-5 pt-6 pb-5 flex items-center justify-between">
         <AjeLogo variant="light" size={28} />
         <button className="md:hidden p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60 hover:text-white"
@@ -56,7 +55,6 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
         </button>
       </div>
 
-      {/* Business switcher */}
       <div className="px-4 pb-4 border-b border-white/8">
         <button onClick={() => setBizDropdown(!bizDropdown)}
           className="w-full flex items-center justify-between gap-2 rounded-xl bg-white/8 hover:bg-white/12 px-3 py-2.5 text-sm font-medium transition-colors min-h-[44px] text-white/80 hover:text-white">
@@ -86,7 +84,6 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
         )}
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/25 px-3 mb-2">Menu</p>
         {navItems.map(({ path, icon: Icon, label }) => {
@@ -106,7 +103,6 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
         })}
       </nav>
 
-      {/* User */}
       <div className="px-4 py-4 border-t border-white/8">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-gradient-brand flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -125,12 +121,38 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
       </div>
     </div>
   );
+};
+
+const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: AppShellProps) => {
+  const { user, logout } = useAuth();
+  const { refreshBusinesses } = useBusiness();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [bizDropdown, setBizDropdown] = useState(false);
+  const [showSmartAdd, setShowSmartAdd] = useState(false);
+  const [showAddBiz, setShowAddBiz] = useState(false);
+  const [showQuickSell, setShowQuickSell] = useState(false);
+
+  const handleLogout = async () => { await logout(); navigate("/"); };
+
+  const sidebarProps: SidebarContentProps = {
+    user,
+    businesses,
+    activeBusiness,
+    onSelectBusiness,
+    bizDropdown,
+    setBizDropdown,
+    setSidebarOpen,
+    setShowAddBiz,
+    handleLogout,
+  };
 
   return (
     <div className="min-h-screen bg-background flex overflow-x-hidden">
-      {/* Desktop sidebar — dark navy */}
+      {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-56 lg:w-60 shrink-0 sticky top-0 h-screen overflow-y-auto sidebar-surface">
-        <SidebarContent />
+        <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* Mobile sidebar */}
@@ -138,17 +160,16 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
         <div className="md:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <aside className="relative w-64 max-w-[82vw] h-full shadow-2xl overflow-y-auto sidebar-surface">
-            <SidebarContent />
+            <SidebarContent {...sidebarProps} />
           </aside>
         </div>
       )}
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Mobile topbar — logo centered, manage button right */}
+        {/* Mobile topbar */}
         <header className="md:hidden border-b bg-card/95 backdrop-blur sticky top-0 z-40 px-4 h-14 flex items-center justify-between shrink-0">
           <div className="w-10" />
-          {/* Logo — centered, one instance */}
           <AjeLogo variant="dark" size={26} />
           <button
             onClick={() => navigate("/businesses")}
@@ -163,156 +184,45 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
           {children}
         </main>
 
-        {/* Bottom Nav — mobile only, 5 tabs: Home, Dashboard, Add, AI, Learn */}
+        {/* Bottom Nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border/60 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
           style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-          <div className="flex items-center justify-around px-1 pt-1 pb-1.5">
-
-            {/* Home */}
-            <Link to="/home"
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
-                location.pathname === "/home" ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
-              }`}>
-              <LayoutDashboard size={22} strokeWidth={location.pathname === "/home" ? 2.5 : 1.8} />
-              <span className="text-[10px] font-semibold tracking-tight">Home</span>
+          <div className="flex items-center justify-around px-2 pt-1 pb-1.5">
+            <Link to="/today"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all min-w-[56px] min-h-[52px] justify-center ${location.pathname === "/today" ? "text-primary bg-primary/10" : "text-muted-foreground"}`}>
+              <Home size={22} strokeWidth={location.pathname === "/today" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold">Money</span>
             </Link>
 
-            {/* Dashboard */}
-            <Link to="/dashboard"
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
-                location.pathname === "/dashboard" || location.pathname === "/analytics" ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
-              }`}>
-              <BarChart3 size={22} strokeWidth={location.pathname === "/dashboard" ? 2.5 : 1.8} />
-              <span className="text-[10px] font-semibold tracking-tight">Dashboard</span>
+            <Link to="/stock"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all min-w-[56px] min-h-[52px] justify-center ${location.pathname === "/stock" ? "text-primary bg-primary/10" : "text-muted-foreground"}`}>
+              <Package size={22} strokeWidth={location.pathname === "/stock" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold">Stock</span>
             </Link>
 
-            {/* Center Add button — prominent */}
             <button onClick={() => setShowSmartAdd(true)}
-              className="flex flex-col items-center gap-0.5 -mt-4 min-w-[56px] min-h-[56px] justify-center">
+              className="flex flex-col items-center gap-0.5 -mt-5 min-w-[60px] justify-center">
               <div className="w-14 h-14 rounded-2xl bg-gradient-brand flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform">
-                <Plus size={26} className="text-white" strokeWidth={2.5} />
+                <Plus size={28} className="text-white" strokeWidth={2.5} />
               </div>
-              <span className="text-[10px] font-semibold tracking-tight text-muted-foreground mt-0.5">Add</span>
+              <span className="text-[10px] font-semibold text-muted-foreground mt-0.5">Add</span>
             </button>
 
-            {/* AI Hub */}
-            <Link to="/ai"
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
-                ["/ai", "/chat", "/coach"].includes(location.pathname) ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
-              }`}>
-              <MessageSquare size={22} strokeWidth={["/ai", "/chat", "/coach"].includes(location.pathname) ? 2.5 : 1.8} />
-              <span className="text-[10px] font-semibold tracking-tight">AI</span>
+            <Link to="/history"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all min-w-[56px] min-h-[52px] justify-center ${location.pathname === "/history" ? "text-primary bg-primary/10" : "text-muted-foreground"}`}>
+              <History size={22} strokeWidth={location.pathname === "/history" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold">History</span>
             </Link>
 
-            {/* Learn */}
-            <Link to="/learn"
-              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all duration-150 min-w-[52px] min-h-[52px] justify-center ${
-                location.pathname === "/learn" || location.pathname === "/coach" ? "text-primary bg-primary/10" : "text-muted-foreground active:bg-muted"
-              }`}>
-              <Brain size={22} strokeWidth={location.pathname === "/learn" ? 2.5 : 1.8} />
-              <span className="text-[10px] font-semibold tracking-tight">Learn</span>
+            <Link to="/settings"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-2xl transition-all min-w-[56px] min-h-[52px] justify-center ${location.pathname === "/settings" ? "text-primary bg-primary/10" : "text-muted-foreground"}`}>
+              <User size={22} strokeWidth={location.pathname === "/settings" ? 2.5 : 1.8} />
+              <span className="text-[10px] font-semibold">Profile</span>
             </Link>
           </div>
         </nav>
-
-        {/* More sheet — slides up from bottom */}
-        {showMoreSheet && (
-          <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMoreSheet(false)} />
-            <div className="relative bg-card rounded-t-3xl shadow-2xl animate-fade-up pb-safe">
-              <div className="flex justify-center pt-3 pb-1">
-                <div className="w-10 h-1 rounded-full bg-muted" />
-              </div>
-              <div className="px-5 py-3 border-b">
-                <p className="font-display font-bold text-base">More</p>
-              </div>
-
-              {/* Nav links */}
-              <div className="p-4 grid grid-cols-3 gap-3">
-                {[
-                  { path: "/analytics", icon: BarChart3, label: "Analytics", color: "bg-blue-50 text-blue-600" },
-                  { path: "/history", icon: History, label: "History", color: "bg-purple-50 text-purple-600" },
-                  { path: "/businesses", icon: Building2, label: "Businesses", color: "bg-emerald-50 text-emerald-600" },
-                ].map(({ path, icon: Icon, label, color }) => (
-                  <Link key={path} to={path} onClick={() => setShowMoreSheet(false)}
-                    className="flex flex-col items-center gap-2 p-4 rounded-2xl border bg-card hover:bg-muted transition-colors">
-                    <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center`}>
-                      <Icon size={20} />
-                    </div>
-                    <span className="text-xs font-semibold">{label}</span>
-                  </Link>
-                ))}
-              </div>
-
-              {/* Business switcher */}
-              <div className="px-4 pb-2">
-                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Your Businesses</p>
-                <div className="space-y-1.5">
-                  {businesses.map(b => (
-                    <button key={b.id}
-                      onClick={() => { onSelectBusiness(b); setShowMoreSheet(false); }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-colors text-sm font-medium ${
-                        activeBusiness?.id === b.id
-                          ? "border-primary bg-primary/5 text-primary"
-                          : "hover:bg-muted"
-                      }`}>
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeBusiness?.id === b.id ? "bg-primary/10" : "bg-muted"}`}>
-                        <Building2 size={15} className={activeBusiness?.id === b.id ? "text-primary" : "text-muted-foreground"} />
-                      </div>
-                      <span className="truncate flex-1 text-left">{b.name}</span>
-                      {activeBusiness?.id === b.id && (
-                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold shrink-0">Active</span>
-                      )}
-                    </button>
-                  ))}
-                  <button onClick={() => { setShowAddBiz(true); setShowMoreSheet(false); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-dashed hover:bg-muted transition-colors text-sm font-medium text-muted-foreground">
-                    <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center shrink-0">
-                      <Plus size={15} />
-                    </div>
-                    Add New Business
-                  </button>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="px-4 pb-8 pt-2 space-y-2">
-                {activeBusiness && (
-                  <button
-                    onClick={() => { setShowMoreSheet(false); setShowDeleteBiz(true); }}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-red-200 hover:bg-red-50 transition-colors text-sm font-semibold text-red-600">
-                    <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center">
-                      <Trash2 size={17} className="text-red-600" />
-                    </div>
-                    Delete Business
-                  </button>
-                )}
-                <button
-                  onClick={() => { setShowMoreSheet(false); handleLogout(); }}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-sm font-semibold text-red-600">
-                  <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center">
-                    <LogOut size={17} className="text-red-600" />
-                  </div>
-                  Log Out
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Add Business Modal */}
-      {showAddBiz && (
-        <AddBusinessModal
-          onClose={() => setShowAddBiz(false)}
-          onCreated={async () => {
-            await refreshBusinesses(true); // select the newly created business
-            setShowAddBiz(false);
-          }}
-        />
-      )}
-
-      {/* Smart Add Modal from bottom nav */}
       {showSmartAdd && activeBusiness && (
         <SmartAddModal
           businessId={activeBusiness.id}
@@ -321,16 +231,10 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
         />
       )}
 
-      {/* Delete Business Modal */}
-      {showDeleteBiz && activeBusiness && (
-        <DeleteBusinessModal
-          business={activeBusiness}
-          onClose={() => setShowDeleteBiz(false)}
-          onDeleted={() => {
-            setShowDeleteBiz(false);
-            setShowMoreSheet(false);
-            navigate("/onboarding");
-          }}
+      {showAddBiz && (
+        <AddBusinessModal
+          onClose={() => setShowAddBiz(false)}
+          onCreated={async () => { await refreshBusinesses(true); setShowAddBiz(false); }}
         />
       )}
     </div>

@@ -14,14 +14,11 @@ import Login from "./pages/Login.tsx";
 import Home from "./pages/Home.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
-import Analytics from "./pages/Analytics.tsx";
-import Coach from "./pages/Coach.tsx";
 import History from "./pages/History.tsx";
-import Chat from "./pages/Chat.tsx";
-import Inventory from "./pages/Inventory.tsx";
-import Learn from "./pages/Learn.tsx";
-import AIHub from "./pages/AIHub.tsx";
-import ManageBusinesses from "./pages/ManageBusinesses.tsx";
+import Today from "./pages/Today.tsx";
+import Stock from "./pages/Stock.tsx";
+import Settings from "./pages/Settings.tsx";
+import Upload from "./pages/Upload.tsx";
 import LogoPreview from "./pages/LogoPreview.tsx";
 
 const queryClient = new QueryClient();
@@ -41,15 +38,12 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/home" element={<Home />} />
+                <Route path="/today" element={<Today />} />
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/coach" element={<Coach />} />
                 <Route path="/history" element={<History />} />
-                <Route path="/chat" element={<Chat />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/learn" element={<Learn />} />
-                <Route path="/ai" element={<AIHub />} />
-                <Route path="/businesses" element={<ManageBusinesses />} />
+                <Route path="/stock" element={<Stock />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/upload" element={<Upload />} />
                 <Route path="/logo-preview" element={<LogoPreview />} />
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="*" element={<NotFound />} />

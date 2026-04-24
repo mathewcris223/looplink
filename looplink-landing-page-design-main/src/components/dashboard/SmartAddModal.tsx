@@ -1,376 +1,330 @@
-import { useState, useRef } from "react";
-import { X, PenLine, Mic, Camera, Upload, Loader2, MicOff, CheckCircle, Layers } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { parseTransactions, ParsedTransaction } from "@/lib/ai";
+/**
+ * SmartAddModal — Unified input system
+ * Menu: Revenue | Expense | Sell Stock | Bulk Entry
+ * Inside Revenue/Expense: Type | Voice | Snap tabs
+ */
+
+import { useState, useRef, useCallback } from "react";
+import { X, Mic, MicOff, Camera, Loader2, CheckCircle, ArrowUpRight, ArrowDownRight, ShoppingCart, Layers, FileUp } from "lucide-react";
 import { addTransaction } from "@/lib/db";
+import { suggestCategory, learnFromTransaction } from "@/lib/smartInsights";
+import { useInventory } from "@/context/InventoryContext";
+import { useNavigate } from "react-router-dom";
+import BulkInputModal from "@/components/dashboard/BulkInputModal";
+import QuickSellModal from "@/components/dashboard/QuickSellModal";
 
 interface Props {
   businessId: string;
+  defaultScreen?: Screen;
   onClose: () => void;
   onSaved: () => void;
 }
 
-type Mode = "menu" | "manual" | "bulk" | "voice" | "image" | "upload" | "preview";
+type Screen = "menu" | "revenue" | "expense" | "sell" | "bulk" | "upload";
+type InputTab = "type" | "voice" | "snap";
 
-const CATEGORIES_REVENUE = ["Product Sale", "Service", "Commission", "Other"];
-const CATEGORIES_EXPENSE = ["Stock", "Transport", "Rent", "Staff", "Marketing", "Other"];
+const EXPENSE_CATS = ["Stock", "Transport", "Rent", "Staff", "Marketing", "Food", "Utilities", "Other"];
+const INCOME_CATS = ["Product Sale", "Service", "Commission", "Other"];
 
-const SmartAddModal = ({ businessId, onClose, onSaved }: Props) => {
-  const [mode, setMode] = useState<Mode>("menu");
-  const [rows, setRows] = useState<ParsedTransaction[]>([]);
-  const [rawText, setRawText] = useState("");
-  const [parsing, setParsing] = useState(false);
+const inputCls = "w-full rounded-xl border bg-muted/30 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+
+// ── Shared Revenue/Expense entry panel ───────────────────────────────────────
+const EntryPanel = ({
+  type, businessId, onClose, onSaved
+}: { type: "income" | "expense"; businessId: string; onClose: () => void; onSaved: () => void }) => {
+  const [tab, setTab] = useState<InputTab>("type");
+  const [amount, setAmount] = useState("");
+  const [desc, setDesc] = useState("");
+  const [cat, setCat] = useState(type === "income" ? "Product Sale" : "Stock");
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+
+  // Voice
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-
-  // Manual form state
-  const [manualType, setManualType] = useState<"income" | "expense">("income");
-  const [manualAmount, setManualAmount] = useState("");
-  const [manualDesc, setManualDesc] = useState("");
-  const [manualCat, setManualCat] = useState("Product Sale");
-  const [bulkText, setBulkText] = useState("");
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [processing, setProcessing] = useState(false);
   const recognitionRef = useRef<unknown>(null);
 
-  // ── Voice input ──────────────────────────────────────────────────────────
+  // Snap
+  const snapRef = useRef<HTMLInputElement>(null);
+  const [snapProcessing, setSnapProcessing] = useState(false);
+  const [snapPreview, setSnapPreview] = useState<string | null>(null);
+
+  const isIncome = type === "income";
+  const cats = isIncome ? INCOME_CATS : EXPENSE_CATS;
+  const suggestedCat = desc.trim().length > 2 ? suggestCategory(desc, type) : cat;
+
+  const save = async (a: number, d: string, c: string) => {
+    if (a <= 0) { setError("Enter a valid amount."); return; }
+    setSaving(true); setError("");
+    try {
+      const finalCat = c || suggestCategory(d, type);
+      await addTransaction(businessId, type, a, d || (isIncome ? "Quick sale" : "Quick expense"), finalCat);
+      learnFromTransaction(type, d, finalCat);
+      setSaved(true);
+      setTimeout(() => { onSaved(); onClose(); }, 600);
+    } catch { setError("Failed to save. Try again."); setSaving(false); }
+  };
+
+  const handleTypeSave = () => save(parseFloat(amount), desc.trim(), suggestedCat);
+
+  // Voice
   const startListening = () => {
-    const SpeechRecognition = (window as unknown as { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition
+    const SR = (window as unknown as { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition
       || (window as unknown as { webkitSpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError("Voice input is not supported on this browser. Try Chrome.");
-      return;
-    }
-    const rec = new SpeechRecognition();
-    rec.lang = "en-NG";
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.onresult = (e) => {
-      const t = Array.from(e.results).map(r => r[0].transcript).join(" ");
-      setTranscript(t);
-    };
+    if (!SR) { setError("Voice not supported. Try Chrome."); return; }
+    const rec = new SR();
+    rec.lang = "en-NG"; rec.continuous = false; rec.interimResults = true;
+    rec.onresult = (e: SpeechRecognitionEvent) => setTranscript(Array.from(e.results).map(r => r[0].transcript).join(" "));
     rec.onend = () => setListening(false);
     rec.onerror = () => { setListening(false); setError("Could not capture voice. Try again."); };
     recognitionRef.current = rec;
-    rec.start();
-    setListening(true);
-    setTranscript("");
+    rec.start(); setListening(true); setTranscript("");
   };
 
-  const stopListening = () => {
-    (recognitionRef.current as { stop?: () => void })?.stop?.();
-    setListening(false);
-  };
+  const stopListening = () => { (recognitionRef.current as { stop?: () => void })?.stop?.(); setListening(false); };
 
-  const parseVoice = async () => {
+  const processVoice = useCallback(async () => {
     if (!transcript.trim()) return;
-    await parseAndPreview(transcript);
-  };
+    setProcessing(true); setError("");
+    try {
+      // Extract amount from transcript
+      const amtMatch = transcript.match(/[\d,]+(?:\.\d+)?/);
+      const amt = amtMatch ? parseFloat(amtMatch[0].replace(/,/g, "")) : 0;
+      const cleanDesc = transcript.replace(/[\d,]+(?:\.\d+)?/g, "").replace(/naira|₦|spent|sold|paid|for|on|i|the/gi, "").trim();
+      const detectedCat = suggestCategory(transcript, type);
+      setAmount(String(amt)); setDesc(cleanDesc); setCat(detectedCat);
+      setTab("type"); // switch to type tab to confirm
+    } catch { setError("Could not process voice. Try again."); }
+    finally { setProcessing(false); }
+  }, [transcript, type]);
 
-  // ── Image / file processing ───────────────────────────────────────────────
-  const handleImageFile = async (file: File) => {
+  // Snap
+  const handleSnap = async (file: File) => {
+    setSnapProcessing(true); setError("");
     const url = URL.createObjectURL(file);
-    setImagePreview(url);
-    // Convert image to base64 and send as text prompt to AI
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const prompt = `Extract all financial transactions from this receipt/document image. List each item with amount, description, and whether it's income or expense. Image data: [image attached - describe what you see as transactions]`;
-      await parseAndPreview(prompt);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // ── Core parse + preview ─────────────────────────────────────────────────
-  const parseAndPreview = async (text: string) => {
-    setParsing(true);
-    setError("");
+    setSnapPreview(url);
     try {
-      const parsed = await parseTransactions(text);
-      setRows(parsed);
-      setMode("preview");
-    } catch {
-      setError("Couldn't parse input. Try rephrasing or use manual entry.");
-    } finally {
-      setParsing(false);
-    }
+      const { aiRequest } = await import("@/lib/aiClient");
+      const reply = await aiRequest({
+        message: `Extract the total amount and description from this receipt. Reply with just: AMOUNT: [number] DESCRIPTION: [text]`,
+        businessType: "general",
+      });
+      const amtMatch = reply.match(/AMOUNT:\s*([\d.]+)/i);
+      const descMatch = reply.match(/DESCRIPTION:\s*(.+)/i);
+      if (amtMatch) setAmount(amtMatch[1]);
+      if (descMatch) setDesc(descMatch[1].trim());
+      setTab("type");
+    } catch { setError("Could not read image. Enter manually."); setTab("type"); }
+    finally { setSnapProcessing(false); }
   };
 
-  // ── Manual save ──────────────────────────────────────────────────────────
-  const saveManual = async () => {
-    if (!manualAmount || parseFloat(manualAmount) <= 0) { setError("Enter a valid amount."); return; }
-    if (!manualDesc.trim()) { setError("Enter a description."); return; }
-    setSaving(true);
-    try {
-      await addTransaction(businessId, manualType, parseFloat(manualAmount), manualDesc.trim(), manualCat);
-      onSaved();
-      onClose();
-    } catch { setError("Failed to save. Try again."); }
-    finally { setSaving(false); }
-  };
-
-  // ── Bulk save from preview ───────────────────────────────────────────────
-  const saveBulk = async () => {
-    setSaving(true);
-    setError("");
-    try {
-      for (const row of rows) {
-        if (!row.amount || row.amount <= 0) continue;
-        await addTransaction(businessId, row.type, row.amount, row.description, row.category);
-      }
-      onSaved();
-      onClose();
-    } catch { setError("Some entries failed to save."); }
-    finally { setSaving(false); }
-  };
-
-  const updateRow = (i: number, field: keyof ParsedTransaction, value: string | number | null) =>
-    setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r));
-
-  const inputCls = "w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
-  const smallInputCls = "rounded-lg border bg-muted/40 px-2 py-1.5 text-xs outline-none focus:border-primary";
+  const accentColor = isIncome ? "emerald" : "red";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl border bg-card shadow-2xl animate-fade-up max-h-[92dvh] flex flex-col">
+    <div className="space-y-4">
+      {/* Input mode tabs */}
+      <div className="flex rounded-xl border overflow-hidden p-0.5 bg-muted/30 gap-0.5">
+        {(["type", "voice", "snap"] as InputTab[]).map(t => (
+          <button key={t} onClick={() => { setTab(t); setError(""); }}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${tab === t ? `bg-${accentColor}-500 text-white` : "text-muted-foreground"}`}>
+            {t === "type" ? "⌨️ Type" : t === "voice" ? "🎤 Voice" : "📷 Snap"}
+          </button>
+        ))}
+      </div>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b shrink-0">
-          <div>
-            <h2 className="font-display font-bold text-lg">
-              {mode === "menu" ? "Add Entry" :
-               mode === "manual" ? "Manual Entry" :
-               mode === "bulk" ? "Bulk Entry" :
-               mode === "voice" ? "Voice Entry" :
-               mode === "image" ? "Snap Receipt" :
-               mode === "upload" ? "Upload File" : "Review & Save"}
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {mode === "menu" ? "Choose how to add your entry" :
-               mode === "preview" ? `${rows.length} transaction${rows.length !== 1 ? "s" : ""} detected` : ""}
-            </p>
+      {/* ── TYPE ── */}
+      {tab === "type" && (
+        <div className="space-y-3">
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">₦</span>
+            <input autoFocus type="number" inputMode="numeric" placeholder="0"
+              value={amount} onChange={e => setAmount(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleTypeSave()}
+              className="w-full rounded-xl border bg-muted/30 pl-9 pr-4 py-4 text-2xl font-bold outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-center" />
           </div>
-          <div className="flex items-center gap-2">
-            {mode !== "menu" && (
-              <button onClick={() => { setMode("menu"); setError(""); setTranscript(""); setImagePreview(null); }}
-                className="text-xs text-primary hover:underline px-2 py-1">← Back</button>
+          <input type="text" placeholder="Description (optional)"
+            value={desc} onChange={e => setDesc(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleTypeSave()}
+            className={inputCls} />
+          {desc.trim().length > 2 && (
+            <p className="text-[11px] text-muted-foreground px-1">
+              Category: <span className="font-semibold text-primary">{suggestedCat}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── VOICE ── */}
+      {tab === "voice" && (
+        <div className="space-y-4 text-center">
+          <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center transition-all ${listening ? "bg-red-100 animate-pulse" : "bg-violet-100"}`}>
+            {listening ? <MicOff size={32} className="text-red-500" /> : <Mic size={32} className="text-violet-600" />}
+          </div>
+          <p className="text-sm font-medium">{listening ? "Listening… speak now" : "Tap to speak"}</p>
+          <p className="text-xs text-muted-foreground">
+            {isIncome ? '"Sold goods for 20000"' : '"Spent 5000 on transport"'}
+          </p>
+          {transcript && (
+            <div className="rounded-xl bg-muted/40 border px-4 py-3 text-sm italic text-muted-foreground text-left">
+              "{transcript}"
+            </div>
+          )}
+          {error && <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            {!listening
+              ? <button onClick={startListening} className="flex-1 py-3 rounded-xl bg-violet-500 text-white text-sm font-bold active:scale-95 transition-transform flex items-center justify-center gap-2"><Mic size={16} /> Start</button>
+              : <button onClick={stopListening} className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-bold active:scale-95 transition-transform flex items-center justify-center gap-2"><MicOff size={16} /> Stop</button>
+            }
+            {transcript && !listening && (
+              <button onClick={processVoice} disabled={processing}
+                className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-bold active:scale-95 transition-transform flex items-center justify-center gap-2">
+                {processing ? <><Loader2 size={14} className="animate-spin" /> Processing…</> : "Use →"}
+              </button>
             )}
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
           </div>
         </div>
+      )}
 
-        <div className="flex-1 overflow-y-auto p-5">
+      {/* ── SNAP ── */}
+      {tab === "snap" && (
+        <div className="space-y-4 text-center">
+          <input ref={snapRef} type="file" accept="image/*" capture="environment" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleSnap(f); }} />
+          {snapPreview
+            ? <img src={snapPreview} alt="Receipt" className="w-full max-h-40 object-contain rounded-xl border" />
+            : <div className="w-20 h-20 rounded-full mx-auto bg-amber-100 flex items-center justify-center"><Camera size={32} className="text-amber-600" /></div>
+          }
+          <p className="text-sm font-medium">{snapProcessing ? "Reading image…" : "Take a photo of your receipt"}</p>
+          <p className="text-xs text-muted-foreground">AI extracts amount and description automatically</p>
+          {error && <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
+          {snapProcessing
+            ? <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> Reading image…</div>
+            : <button onClick={() => snapRef.current?.click()}
+                className="w-full py-3 rounded-xl bg-amber-500 text-white text-sm font-bold active:scale-95 transition-transform flex items-center justify-center gap-2">
+                <Camera size={16} /> {snapPreview ? "Retake" : "Open Camera"}
+              </button>
+          }
+        </div>
+      )}
 
+      {error && tab === "type" && <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
+
+      {/* Save button — only show on type tab */}
+      {tab === "type" && (
+        <button onClick={handleTypeSave} disabled={saving || saved || !amount || parseFloat(amount) <= 0}
+          className={`w-full py-4 rounded-2xl text-base font-bold transition-all active:scale-[0.98] disabled:opacity-40 ${
+            saved ? "bg-emerald-500 text-white" : isIncome ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
+          }`}>
+          {saved
+            ? <span className="flex items-center justify-center gap-2"><CheckCircle size={18} /> Saved!</span>
+            : saving
+            ? <span className="flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin" /> Saving…</span>
+            : `Save ${isIncome ? "Revenue" : "Expense"}`}
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ── Main modal ────────────────────────────────────────────────────────────────
+const SmartAddModal = ({ businessId, defaultScreen, onClose, onSaved }: Props) => {
+  const [screen, setScreen] = useState<Screen>(defaultScreen ?? "menu");
+  const { inventoryItems } = useInventory();
+  const navigate = useNavigate();
+
+  const MENU = [
+    { id: "revenue" as Screen, icon: ArrowUpRight, label: "Revenue", desc: "Money coming in", color: "bg-emerald-500", textColor: "text-white" },
+    { id: "expense" as Screen, icon: ArrowDownRight, label: "Expense", desc: "Money going out", color: "bg-red-500", textColor: "text-white" },
+    { id: "sell" as Screen, icon: ShoppingCart, label: "Sell Stock", desc: "Quick POS sale", color: "bg-amber-500", textColor: "text-white" },
+    { id: "bulk" as Screen, icon: Layers, label: "Bulk Entry", desc: "Multiple at once", color: "bg-violet-500", textColor: "text-white" },
+    { id: "upload" as Screen, icon: FileUp, label: "Upload File", desc: "Import bank statement or CSV", color: "bg-blue-500", textColor: "text-white" },
+  ];
+
+  const title = screen === "menu" ? "Add Entry"
+    : screen === "revenue" ? "Revenue"
+    : screen === "expense" ? "Expense"
+    : screen === "sell" ? "Sell Stock"
+    : "Bulk Entry";
+
+  // Upload navigates to the dedicated page
+  if (screen === "upload") {
+    onClose();
+    navigate("/upload");
+    return null;
+  }
+
+  // Sell and Bulk render as full-screen overlays — just render them directly
+  if (screen === "sell") {
+    return (
+      <QuickSellModal
+        businessId={businessId}
+        items={inventoryItems}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    );
+  }
+
+  if (screen === "bulk") {
+    return (
+      <BulkInputModal
+        businessId={businessId}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-card rounded-t-3xl shadow-2xl flex flex-col"
+        style={{ maxHeight: "92dvh" }}>
+
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-muted" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-1 pb-3 shrink-0">
+          <div className="flex items-center gap-2">
+            {screen !== "menu" && (
+              <button onClick={() => setScreen("menu")}
+                className="text-xs text-primary font-medium hover:underline">← Back</button>
+            )}
+            <h2 className="text-base font-bold">{title}</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted"><X size={18} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 pb-8">
           {/* ── MENU ── */}
-          {mode === "menu" && (
+          {screen === "menu" && (
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { id: "manual", icon: PenLine, label: "Enter Manually", desc: "Type amount & details", color: "bg-blue-50 text-blue-600" },
-                { id: "bulk", icon: Layers, label: "Bulk Entry", desc: "Multiple entries at once", color: "bg-emerald-50 text-emerald-600" },
-                { id: "voice", icon: Mic, label: "Speak Entry", desc: "Talk to record", color: "bg-violet-50 text-violet-600" },
-                { id: "image", icon: Camera, label: "Snap Receipt", desc: "Take a photo", color: "bg-amber-50 text-amber-600" },
-              ].map(({ id, icon: Icon, label, desc, color }) => (
-                <button key={id} onClick={() => setMode(id as Mode)}
-                  className="flex flex-col items-start gap-3 p-4 rounded-2xl border bg-card hover:border-primary hover:bg-primary/5 transition-all text-left active:scale-95">
-                  <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center`}>
-                    <Icon size={20} />
-                  </div>
+              {MENU.map(({ id, icon: Icon, label, desc, color, textColor }) => (
+                <button key={id} onClick={() => setScreen(id)}
+                  className={`flex flex-col items-start gap-3 p-4 rounded-2xl ${color} ${textColor} active:scale-95 transition-transform shadow-sm`}>
+                  <Icon size={24} />
                   <div>
-                    <p className="text-sm font-semibold">{label}</p>
-                    <p className="text-xs text-muted-foreground">{desc}</p>
+                    <p className="text-sm font-bold">{label}</p>
+                    <p className="text-xs opacity-80">{desc}</p>
                   </div>
                 </button>
               ))}
             </div>
           )}
 
-          {/* ── BULK ENTRY ── */}
-          {mode === "bulk" && (
-            <div className="space-y-4">
-              <div className="rounded-xl bg-muted/40 border px-4 py-3 text-xs text-muted-foreground">
-                Type multiple entries separated by commas or new lines.<br />
-                <span className="font-medium text-foreground">Example:</span> "Rice 20000, transport 5000, sold coke 15000"
-              </div>
-              <textarea
-                autoFocus
-                value={bulkText}
-                onChange={e => setBulkText(e.target.value)}
-                placeholder="Rice 20000, transport 5000, sold coke 15000..."
-                className="w-full rounded-xl border bg-muted/40 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
-                style={{ minHeight: "140px" }}
-              />
-              {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
-              <Button variant="hero" size="lg" onClick={() => parseAndPreview(bulkText)} disabled={parsing || !bulkText.trim()} className="w-full rounded-xl">
-                {parsing ? <><Loader2 size={16} className="animate-spin" /> Detecting entries…</> : "Detect Transactions →"}
-              </Button>
-            </div>
+          {/* ── REVENUE ── */}
+          {screen === "revenue" && (
+            <EntryPanel type="income" businessId={businessId} onClose={onClose} onSaved={onSaved} />
           )}
 
-          {/* ── MANUAL ── */}
-          {mode === "manual" && (
-            <div className="space-y-4">
-              {/* Type toggle */}
-              <div className="flex rounded-xl border overflow-hidden">
-                {(["income", "expense"] as const).map(t => (
-                  <button key={t} onClick={() => { setManualType(t); setManualCat(t === "income" ? "Product Sale" : "Stock"); }}
-                    className={`flex-1 py-2.5 text-sm font-semibold transition-colors ${manualType === t ? (t === "income" ? "bg-emerald-500 text-white" : "bg-red-500 text-white") : "bg-muted/40 text-muted-foreground"}`}>
-                    {t === "income" ? "💰 Revenue" : "💸 Expense"}
-                  </button>
-                ))}
-              </div>
-              <div>
-                <label className="text-sm font-medium">Amount (₦)</label>
-                <input autoFocus type="number" min="0" placeholder="e.g. 5000"
-                  value={manualAmount} onChange={e => setManualAmount(e.target.value)}
-                  className={`${inputCls} mt-1.5`} />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Description</label>
-                <input type="text" placeholder="e.g. Sold 10 bags of rice"
-                  value={manualDesc} onChange={e => setManualDesc(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && saveManual()}
-                  className={`${inputCls} mt-1.5`} />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Category</label>
-                <select value={manualCat} onChange={e => setManualCat(e.target.value)} className={`${inputCls} mt-1.5`}>
-                  {(manualType === "income" ? CATEGORIES_REVENUE : CATEGORIES_EXPENSE).map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-              {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
-              <Button variant="hero" size="lg" onClick={saveManual} disabled={saving} className="w-full rounded-xl">
-                {saving ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : "Save Entry"}
-              </Button>
-            </div>
-          )}
-
-          {/* ── VOICE ── */}
-          {mode === "voice" && (
-            <div className="space-y-5 text-center">
-              <div className={`w-24 h-24 rounded-full mx-auto flex items-center justify-center transition-all duration-300 ${listening ? "bg-red-100 animate-pulse shadow-lg shadow-red-200" : "bg-violet-100"}`}>
-                {listening ? <MicOff size={36} className="text-red-500" /> : <Mic size={36} className="text-violet-600" />}
-              </div>
-              <div>
-                <p className="font-semibold text-sm">{listening ? "Listening… speak now" : "Tap to start speaking"}</p>
-                <p className="text-xs text-muted-foreground mt-1">e.g. "I spent ₦5,000 on transport" or "Sold goods for ₦20,000"</p>
-              </div>
-              {transcript && (
-                <div className="rounded-xl bg-muted/40 border px-4 py-3 text-sm text-left italic text-muted-foreground">
-                  "{transcript}"
-                </div>
-              )}
-              {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
-              <div className="flex gap-3">
-                {!listening ? (
-                  <Button variant="hero" size="lg" onClick={startListening} className="flex-1 rounded-xl gap-2">
-                    <Mic size={16} /> Start Speaking
-                  </Button>
-                ) : (
-                  <Button variant="hero-outline" size="lg" onClick={stopListening} className="flex-1 rounded-xl gap-2">
-                    <MicOff size={16} /> Stop
-                  </Button>
-                )}
-                {transcript && !listening && (
-                  <Button variant="hero" size="lg" onClick={parseVoice} disabled={parsing} className="flex-1 rounded-xl">
-                    {parsing ? <><Loader2 size={16} className="animate-spin" /> Processing…</> : "Process →"}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── IMAGE (camera) ── */}
-          {mode === "image" && (
-            <div className="space-y-5 text-center">
-              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f); }} />
-              {imagePreview ? (
-                <img src={imagePreview} alt="Receipt" className="w-full max-h-48 object-contain rounded-xl border" />
-              ) : (
-                <div className="w-24 h-24 rounded-full mx-auto bg-emerald-100 flex items-center justify-center">
-                  <Camera size={36} className="text-emerald-600" />
-                </div>
-              )}
-              <div>
-                <p className="font-semibold text-sm">Take a photo of your receipt</p>
-                <p className="text-xs text-muted-foreground mt-1">AI will extract the transaction details automatically</p>
-              </div>
-              {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
-              {parsing && <p className="text-sm text-muted-foreground animate-pulse">Analysing image…</p>}
-              {!parsing && (
-                <Button variant="hero" size="lg" onClick={() => cameraInputRef.current?.click()} className="w-full rounded-xl gap-2">
-                  <Camera size={16} /> {imagePreview ? "Retake Photo" : "Open Camera"}
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* ── UPLOAD ── */}
-          {mode === "upload" && (
-            <div className="space-y-5 text-center">
-              <input ref={fileInputRef} type="file" accept="image/*,.pdf,.txt,.csv" className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleImageFile(f); }} />
-              <div className="w-24 h-24 rounded-full mx-auto bg-amber-100 flex items-center justify-center">
-                <Upload size={36} className="text-amber-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">Upload a receipt or document</p>
-                <p className="text-xs text-muted-foreground mt-1">Supports images, PDFs, and text files</p>
-              </div>
-              {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
-              {parsing && <p className="text-sm text-muted-foreground animate-pulse">Processing file…</p>}
-              {!parsing && (
-                <Button variant="hero" size="lg" onClick={() => fileInputRef.current?.click()} className="w-full rounded-xl gap-2">
-                  <Upload size={16} /> Choose File
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* ── PREVIEW ── */}
-          {mode === "preview" && (
-            <div className="space-y-4">
-              <div className="rounded-xl bg-muted/40 px-4 py-3 text-sm flex flex-wrap gap-4">
-                <span className="text-emerald-600 font-medium">{rows.filter(r => r.type === "income").length} revenue</span>
-                <span className="text-red-500 font-medium">{rows.filter(r => r.type === "expense").length} expense</span>
-              </div>
-              <div className="space-y-2">
-                {rows.map((row, i) => (
-                  <div key={i} className={`rounded-xl border p-3 ${row.type === "income" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-[10px] text-muted-foreground mb-1">Type</p>
-                        <select value={row.type} onChange={e => updateRow(i, "type", e.target.value)} className={`${smallInputCls} w-full`}>
-                          <option value="income">Revenue</option>
-                          <option value="expense">Expense</option>
-                        </select>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-muted-foreground mb-1">Amount (₦)</p>
-                        <input type="number" min="0" value={row.amount ?? ""} onChange={e => updateRow(i, "amount", parseFloat(e.target.value) || null)} className={`${smallInputCls} w-full`} />
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-[10px] text-muted-foreground mb-1">Description</p>
-                        <input value={row.description} onChange={e => updateRow(i, "description", e.target.value)} className={`${smallInputCls} w-full`} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {error && <p className="text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2">{error}</p>}
-              <div className="flex gap-3">
-                <Button variant="hero-outline" onClick={() => setMode("menu")} className="flex-1 rounded-xl">Start Over</Button>
-                <Button variant="hero" onClick={saveBulk} disabled={saving || rows.length === 0} className="flex-1 rounded-xl">
-                  {saving ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : <><CheckCircle size={16} /> Save {rows.length}</>}
-                </Button>
-              </div>
-            </div>
+          {/* ── EXPENSE ── */}
+          {screen === "expense" && (
+            <EntryPanel type="expense" businessId={businessId} onClose={onClose} onSaved={onSaved} />
           )}
         </div>
       </div>

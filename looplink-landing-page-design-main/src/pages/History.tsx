@@ -14,6 +14,7 @@ const History = () => {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
+  const [period, setPeriod] = useState<"today" | "week" | "month" | "year">("today");
   const [loading, setLoading] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
 
@@ -64,7 +65,25 @@ const History = () => {
     } catch { /* silent */ }
   };
 
-  const filtered = transactions.filter(t => filter === "all" || t.type === filter);
+  const filtered = transactions.filter(t => {
+    // Period filter
+    const d = t.created_at?.split("T")[0] ?? "";
+    const today = new Date().toISOString().split("T")[0];
+    const weekStart = new Date(Date.now() - 6 * 86400000).toISOString().split("T")[0];
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split("T")[0];
+    const yearStart = `${new Date().getFullYear()}-01-01`;
+    const inPeriod =
+      period === "today" ? d === today :
+      period === "week" ? d >= weekStart :
+      period === "month" ? d >= monthStart :
+      d >= yearStart;
+    if (!inPeriod) return false;
+    return filter === "all" || t.type === filter;
+  });
+
+  const periodRevenue = filtered.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const periodExpenses = filtered.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const periodProfit = periodRevenue - periodExpenses;
 
   const grouped: Record<string, Transaction[]> = {};
   filtered.forEach(t => {
@@ -75,21 +94,51 @@ const History = () => {
 
   return (
     <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness}>
-      <div className="flex items-start justify-between mb-6 md:mb-8 gap-3 flex-wrap">
+      <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
         <div className="min-w-0">
-          <h1 className="font-display text-xl md:text-2xl lg:text-3xl font-bold mb-1">Transaction History</h1>
-          <p className="text-muted-foreground text-xs md:text-sm">{activeBusiness.name} · {transactions.length} records</p>
+          <h1 className="font-display text-xl md:text-2xl font-bold mb-1">History</h1>
+          <p className="text-muted-foreground text-xs">{activeBusiness.name} · {filtered.length} records</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Filter size={14} className="text-muted-foreground shrink-0" />
-          {(["all", "income", "expense"] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-2 rounded-full text-xs font-medium capitalize transition-all min-h-[36px] ${
+          {(["income", "expense"] as const).map(f => (
+            <button key={f} onClick={() => setFilter(prev => prev === f ? "all" : f)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-all ${
                 filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
               }`}>
               {f}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Period filter */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+        {(["today", "week", "month", "year"] as const).map(p => (
+          <button key={p} onClick={() => setPeriod(p)}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+              period === p ? "bg-primary text-primary-foreground" : "bg-card border text-muted-foreground hover:text-foreground"
+            }`}>
+            {p === "today" ? "Today" : p === "week" ? "This Week" : p === "month" ? "This Month" : "This Year"}
+          </button>
+        ))}
+      </div>
+
+      {/* Period summary */}
+      <div className="grid grid-cols-3 gap-2 mb-5">
+        <div className="bg-card border rounded-xl px-3 py-2.5 text-center">
+          <p className="text-[10px] text-muted-foreground mb-0.5">Revenue</p>
+          <p className="text-sm font-bold text-emerald-600">₦{periodRevenue.toLocaleString()}</p>
+        </div>
+        <div className="bg-card border rounded-xl px-3 py-2.5 text-center">
+          <p className="text-[10px] text-muted-foreground mb-0.5">Expenses</p>
+          <p className="text-sm font-bold text-red-500">₦{periodExpenses.toLocaleString()}</p>
+        </div>
+        <div className={`border rounded-xl px-3 py-2.5 text-center ${periodProfit >= 0 ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+          <p className="text-[10px] text-muted-foreground mb-0.5">Profit</p>
+          <p className={`text-sm font-bold ${periodProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+            {periodProfit >= 0 ? "+" : ""}₦{periodProfit.toLocaleString()}
+          </p>
         </div>
       </div>
 
