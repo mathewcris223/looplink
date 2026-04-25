@@ -28,15 +28,14 @@ export interface StatementSummary {
   patterns: string[];
 }
 
-// ── File → rows[][] using SheetJS for everything ──────────────────────────────
-async function fileToRows(file: File): Promise<string[][]> {
-  const buffer = await file.arrayBuffer();
+// ── File → rows[][] using SheetJS — accepts pre-read buffer ──────────────────
+async function fileToRows(buffer: ArrayBuffer): Promise<string[][]> {
   const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: string[][] = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     defval: "",
-    raw: false, // format everything as strings
+    raw: false,
   }) as string[][];
   return rows.filter(r => r.some(c => String(c).trim()));
 }
@@ -167,7 +166,7 @@ function detectPatterns(txs: ParsedTransaction[]): string[] {
 export async function parseStatement(
   file: File,
   onProgress: (msg: string) => void
-): Promise<{ transactions: ParsedTransaction[]; summary: StatementSummary }> {
+): Promise<{ transactions: ParsedTransaction[]; summary: StatementSummary; fileHash: string }> {
 
   onProgress("Reading file…");
 
@@ -182,12 +181,12 @@ export async function parseStatement(
   const cached = loadCache(hash);
   if (cached) {
     onProgress("Done!");
-    return cached;
+    return { ...cached, fileHash: hash };
   }
 
   onProgress("Detecting format…");
 
-  const rows = await fileToRows(file);
+  const rows = await fileToRows(buffer);
   if (rows.length < 2) throw new Error("File appears empty or has no data rows. Try a CSV export from your bank.");
 
   // Find the header row — skip blank/logo rows at the top
@@ -297,5 +296,5 @@ export async function parseStatement(
   saveCache(hash, result);
 
   onProgress("Done!");
-  return result;
+  return { ...result, fileHash: hash };
 }

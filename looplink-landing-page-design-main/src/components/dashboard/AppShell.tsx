@@ -171,13 +171,7 @@ const AppShell = ({ children, businesses, activeBusiness, onSelectBusiness }: Ap
         <header className="md:hidden border-b bg-card/95 backdrop-blur sticky top-0 z-40 px-4 h-14 flex items-center justify-between shrink-0">
           <div className="w-10" />
           <AjeLogo variant="dark" size={26} />
-          <button
-            onClick={() => navigate("/businesses")}
-            className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center active:bg-muted/80 transition-colors"
-            title="Manage Businesses"
-          >
-            <Building2 size={18} className="text-foreground" />
-          </button>
+          <div className="w-10" />
         </header>
 
         <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-6xl mx-auto overflow-x-hidden pb-28 md:pb-0">

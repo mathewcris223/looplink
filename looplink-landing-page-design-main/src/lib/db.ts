@@ -213,6 +213,24 @@ export async function addTransactionsBatch(
   }
 }
 
+// Update type/category for transactions matching description+amount — used when rules are applied in DataChat
+export async function updateTransactionClassifications(
+  businessId: string,
+  updates: Array<{ description: string; amount: number; type: "income" | "expense"; category: string }>
+): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  // Run updates in parallel batches
+  await Promise.all(updates.map(u =>
+    supabase.from("transactions")
+      .update({ type: u.type, category: u.category })
+      .eq("business_id", businessId)
+      .eq("user_id", user.id)
+      .eq("description", u.description)
+      .eq("amount", u.amount)
+  ));
+}
+
 export async function addTransaction(
   businessId: string, type: "income" | "expense",
   amount: number, description: string, category: string

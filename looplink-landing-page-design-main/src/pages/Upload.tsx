@@ -10,8 +10,8 @@ import { useBusiness } from "@/context/BusinessContext";
 import AppShell from "@/components/dashboard/AppShell";
 import { addTransactionsBatch } from "@/lib/db";
 import {
-  Upload as UploadIcon, CheckCircle, AlertTriangle, ChevronDown, ChevronUp,
-  ArrowUpRight, ArrowDownRight, Loader2, RefreshCw, MessageSquare
+  Upload as UploadIcon, CheckCircle, AlertTriangle,
+  ArrowUpRight, ArrowDownRight, Loader2, RefreshCw, Search
 } from "lucide-react";
 import type { ParsedTransaction, StatementSummary } from "@/lib/statementParser";
 import { DataChat } from "@/components/upload/DataChat";
@@ -30,9 +30,10 @@ const Upload = () => {
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
   const [summary, setSummary] = useState<StatementSummary | null>(null);
   const [error, setError] = useState("");
-  const [showDrillDown, setShowDrillDown] = useState(false);
-  const [autoSaved, setAutoSaved] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [autoSaveError, setAutoSaveError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Safe redirect — wait for both auth AND business context to resolve
   useEffect(() => {
@@ -53,7 +54,6 @@ const Upload = () => {
 
     setScreen("processing");
     setError("");
-    setAutoSaved(false);
     setAutoSaveError("");
     setProgressStep(0);
 
@@ -70,30 +70,9 @@ const Upload = () => {
 
       setTransactions(txs);
       setSummary(sum);
-
-      // ── AUTO-SAVE to DB so AI chat can read it ──────────────────────────
-      const biz = activeBusiness ?? businesses[0];
-      if (biz) {
-        setProgress("Saving to your account…");
-        try {
-          const toSave = txs
-            .filter(t => t.type === "income" || t.type === "expense")
-            .map(t => ({
-              type: t.type as "income" | "expense",
-              amount: t.amount,
-              description: t.description,
-              category: t.category,
-            }));
-          console.log("[Upload] Auto-saving", toSave.length, "transactions to DB…");
-          await addTransactionsBatch(biz.id, toSave);
-          console.log("[Upload] Auto-save success");
-          setAutoSaved(true);
-        } catch (saveErr) {
-          console.error("[Upload] Auto-save failed:", saveErr);
-          setAutoSaveError("Saved locally but couldn't sync to account. Try again.");
-        }
-      }
-
+      setSelectedIds(null); // reset selection for new file
+      setSaveStatus("idle");
+      setAutoSaveError("");
       setScreen("results");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to process file. Try a CSV export from your bank.");
@@ -210,17 +189,17 @@ const Upload = () => {
         {/* ── RESULTS SCREEN ── */}
         {screen === "results" && summary && (
           <>
-            {/* Summary cards — shown FIRST */}
+            {/* Summary cards */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-3">
                 <h1 className="text-xl font-bold">File Summary</h1>
-                <button onClick={() => { setScreen("upload"); setAutoSaved(false); setAutoSaveError(""); setTransactions([]); setSummary(null); }}
+                <button onClick={() => { setScreen("upload"); setTransactions([]); setSummary(null); setSelectedIds(null); setSaveStatus("idle"); }}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
                   <RefreshCw size={13} /> New upload
                 </button>
               </div>
 
-              {/* Net balance — hero */}
+              {/* Net balance */}
               <div className={`rounded-2xl p-5 mb-3 ${summary.netBalance >= 0 ? "bg-emerald-500" : "bg-red-500"} text-white`}>
                 <p className="text-xs font-medium opacity-80 mb-1">Net Balance</p>
                 <p className="text-4xl font-bold">
@@ -273,91 +252,133 @@ const Upload = () => {
               )}
             </div>
 
-            {/* Chat with your data */}
+            {/* ── AI Chat with your data ── */}
             <DataChat
               transactions={transactions}
               summary={summary}
-              onUpdateTransactions={setTransactions}
+              selectedIds={selectedIds ?? new Set(transactions.filter(t => t.type === "income" || t.type === "expense").map(t => t.id))}
+              onUpdateTransactions={(updated) => {
+                setTransactions(updated);
+                const eligible = updated.filter(t => t.type === "income" || t.type === "expense");
+                setSelectedIds(new Set(eligible.map(t => t.id)));
+              }}
+              onUpdateSelection={(ids) => setSelectedIds(ids)}
             />
 
-            {/* Auto-save status + Chat CTA */}
-            {autoSaved ? (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-4 mb-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <CheckCircle size={20} className="text-emerald-600 shrink-0" />
-                  <div>
-                    <p className="text-sm font-bold text-emerald-700">File ready. Ask anything.</p>
-                    <p className="text-xs text-emerald-600">{transactions.filter(t => t.type === "income" || t.type === "expense").length} transactions saved to your account</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => navigate("/chat")}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold active:scale-[0.98] transition-all">
-                  <MessageSquare size={16} /> Chat with AI about this file
-                </button>
-              </div>
-            ) : autoSaveError ? (
-              <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-4 mb-5">
-                <div className="flex items-start gap-2 mb-3">
-                  <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700">{autoSaveError}</p>
-                </div>
-                <button
-                  onClick={() => {
-                    const toSave = transactions
-                      .filter(t => t.type === "income" || t.type === "expense")
-                      .map(t => ({ type: t.type as "income" | "expense", amount: t.amount, description: t.description, category: t.category }));
-                    const biz = activeBusiness ?? businesses[0];
-                    if (biz) {
-                      setAutoSaveError("");
-                      addTransactionsBatch(biz.id, toSave)
-                        .then(() => setAutoSaved(true))
-                        .catch(() => setAutoSaveError("Sync failed again. Check your connection."));
-                    }
-                  }}
-                  className="w-full py-3 rounded-xl bg-red-500 text-white text-sm font-bold">
-                  Retry sync
-                </button>
-              </div>
-            ) : null}
+            {/* ── Transaction review — select which to add ── */}
+            {(() => {
+              const eligible = transactions.filter(t => t.type === "income" || t.type === "expense");
+              const selected = selectedIds ?? new Set(eligible.map(t => t.id));
+              const selectedCount = selected.size;
+              const allSelected = selectedCount === eligible.length;
+              const filtered = searchQuery.trim()
+                ? eligible.filter(t =>
+                    t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    t.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    t.amount.toString().includes(searchQuery)
+                  )
+                : eligible;
 
-            {/* Drill-down — transactions list */}
-            <button onClick={() => setShowDrillDown(d => !d)}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border bg-card mb-2">
-              <span className="text-sm font-semibold">View all transactions ({transactions.length})</span>
-              {showDrillDown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-
-            {showDrillDown && (
-              <div className="space-y-1.5 mb-6">
-                {transactions.map(tx => (
-                  <div key={tx.id} className={`flex items-center justify-between py-2.5 px-3 rounded-xl border text-sm ${
-                    tx.isUnusual ? "bg-amber-50 border-amber-200" :
-                    tx.type === "income" ? "bg-card border-border" :
-                    tx.type === "expense" ? "bg-card border-border" :
-                    "bg-muted/20 border-border"
-                  }`}>
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-2 h-6 rounded-full shrink-0 ${
-                        tx.type === "income" ? "bg-emerald-500" :
-                        tx.type === "expense" ? "bg-red-400" :
-                        "bg-muted-foreground"
-                      }`} />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">{tx.description}</p>
-                        <p className="text-[10px] text-muted-foreground">{tx.category} · {tx.date}</p>
-                      </div>
+              return (
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm font-bold">Add to transaction history</p>
+                      <p className="text-xs text-muted-foreground">{selectedCount} of {eligible.length} selected</p>
                     </div>
-                    <div className="text-right shrink-0 ml-2">
-                      <p className={`text-xs font-bold ${tx.type === "income" ? "text-emerald-600" : tx.type === "expense" ? "text-red-500" : "text-muted-foreground"}`}>
-                        ₦{tx.amount.toLocaleString()}
-                      </p>
-                      {tx.isUnusual && <p className="text-[10px] text-amber-600">⚠ Unusual</p>}
-                    </div>
+                    <button
+                      onClick={() => setSelectedIds(allSelected ? new Set() : new Set(eligible.map(t => t.id)))}
+                      className="text-xs text-primary font-medium">
+                      {allSelected ? "Deselect all" : "Select all"}
+                    </button>
                   </div>
-                ))}
-              </div>
-            )}
+
+                  {/* Search bar */}
+                  <div className="flex items-center gap-2 bg-muted/40 border rounded-xl px-3 py-2 mb-3">
+                    <Search size={13} className="text-muted-foreground shrink-0" />
+                    <input
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="Search transactions…"
+                      className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                    />
+                    {searchQuery && (
+                      <button onClick={() => setSearchQuery("")} className="text-[10px] text-muted-foreground hover:text-foreground">✕</button>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 mb-4 max-h-80 overflow-y-auto">
+                    {filtered.map(tx => {
+                      const isSelected = selected.has(tx.id);
+                      return (
+                        <div
+                          key={tx.id}
+                          onClick={() => {
+                            const next = new Set(selected);
+                            isSelected ? next.delete(tx.id) : next.add(tx.id);
+                            setSelectedIds(next);
+                          }}
+                          className={`flex items-center gap-3 py-2.5 px-3 rounded-xl border cursor-pointer transition-all active:scale-[0.98] ${
+                            isSelected ? "bg-primary/5 border-primary/30" : "bg-muted/20 border-border opacity-50"
+                          }`}
+                        >
+                          {/* Checkbox */}
+                          <div className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
+                            isSelected ? "bg-primary border-primary" : "border-muted-foreground"
+                          }`}>
+                            {isSelected && <CheckCircle size={10} className="text-primary-foreground" />}
+                          </div>
+                          <div className={`w-1.5 h-5 rounded-full shrink-0 ${tx.type === "income" ? "bg-emerald-500" : "bg-red-400"}`} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium truncate">{tx.description}</p>
+                            <p className="text-[10px] text-muted-foreground">{tx.category} · {tx.date}</p>
+                          </div>
+                          <p className={`text-xs font-bold shrink-0 ${tx.type === "income" ? "text-emerald-600" : "text-red-500"}`}>
+                            ₦{tx.amount.toLocaleString()}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Save button */}
+                  {saveStatus === "saved" ? (
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+                      <CheckCircle size={16} className="text-emerald-600 shrink-0" />
+                      <p className="text-sm font-semibold text-emerald-700">{selectedCount} transaction{selectedCount !== 1 ? "s" : ""} added to your history</p>
+                    </div>
+                  ) : (
+                    <button
+                      disabled={selectedCount === 0 || saveStatus === "saving"}
+                      onClick={async () => {
+                        const biz = activeBusiness ?? businesses[0];
+                        if (!biz) return;
+                        setSaveStatus("saving");
+                        try {
+                          const toSave = eligible
+                            .filter(t => selected.has(t.id))
+                            .map(t => ({ type: t.type as "income" | "expense", amount: t.amount, description: t.description, category: t.category }));
+                          await addTransactionsBatch(biz.id, toSave);
+                          setSaveStatus("saved");
+                        } catch {
+                          setSaveStatus("idle");
+                          setAutoSaveError("Failed to save. Check your connection and try again.");
+                        }
+                      }}
+                      className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                      {saveStatus === "saving" ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : `Add ${selectedCount} transaction${selectedCount !== 1 ? "s" : ""} to history`}
+                    </button>
+                  )}
+
+                  {autoSaveError && (
+                    <div className="mt-2 flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                      <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700">{autoSaveError}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
