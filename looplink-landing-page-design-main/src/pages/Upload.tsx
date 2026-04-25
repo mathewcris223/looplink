@@ -3,7 +3,7 @@
  * Upload CSV/Excel → AI classifies → Clean summary shown first → Drill-down available
  */
 
-import { useState, useRef, useCallback, useEffect, lazy, Suspense } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
@@ -20,7 +20,7 @@ type Screen = "upload" | "processing" | "results";
 
 const Upload = () => {
   const { user, loading: authLoading } = useAuth();
-  const { businesses, activeBusiness, setActiveBusiness } = useBusiness();
+  const { businesses, activeBusiness, setActiveBusiness, loading: bizLoading } = useBusiness();
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -35,12 +35,12 @@ const Upload = () => {
   const [saved, setSaved] = useState(false);
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set(["income", "expense"]));
 
-  // Safe redirect — inside useEffect, never during render
+  // Safe redirect — wait for both auth AND business context to resolve
   useEffect(() => {
-    if (!authLoading && (!user || !activeBusiness)) {
+    if (!authLoading && !bizLoading && (!user || !activeBusiness)) {
       navigate("/login");
     }
-  }, [authLoading, user, activeBusiness, navigate]);
+  }, [authLoading, bizLoading, user, activeBusiness, navigate]);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file) return;
@@ -103,8 +103,8 @@ const Upload = () => {
 
   const STEPS = ["Read", "Detect", "Extract", "Classify", "Clean", "Done"];
 
-  // Don't render until auth resolves — prevents flicker and redirect loops
-  if (authLoading) return null;
+  // Don't render until auth AND business context resolve
+  if (authLoading || bizLoading) return null;
   if (!user || !activeBusiness) return null;
 
   return (
