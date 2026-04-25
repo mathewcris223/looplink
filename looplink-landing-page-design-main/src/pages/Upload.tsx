@@ -36,10 +36,11 @@ const Upload = () => {
 
   // Safe redirect — wait for both auth AND business context to resolve
   useEffect(() => {
-    if (!authLoading && !bizLoading && (!user || !activeBusiness)) {
-      navigate("/login");
-    }
-  }, [authLoading, bizLoading, user, activeBusiness, navigate]);
+    if (authLoading || bizLoading) return; // still loading — do nothing
+    if (!user) { navigate("/login"); return; }
+    if (businesses.length === 0) { navigate("/onboarding"); return; }
+    // activeBusiness will be set by BusinessContext — no redirect needed
+  }, [authLoading, bizLoading, user, businesses, navigate]);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file) return;
@@ -71,7 +72,8 @@ const Upload = () => {
       setSummary(sum);
 
       // ── AUTO-SAVE to DB so AI chat can read it ──────────────────────────
-      if (activeBusiness) {
+      const biz = activeBusiness ?? businesses[0];
+      if (biz) {
         setProgress("Saving to your account…");
         try {
           const toSave = txs
@@ -83,7 +85,7 @@ const Upload = () => {
               category: t.category,
             }));
           console.log("[Upload] Auto-saving", toSave.length, "transactions to DB…");
-          await addTransactionsBatch(activeBusiness.id, toSave);
+          await addTransactionsBatch(biz.id, toSave);
           console.log("[Upload] Auto-save success");
           setAutoSaved(true);
         } catch (saveErr) {
@@ -97,7 +99,7 @@ const Upload = () => {
       setError(e instanceof Error ? e.message : "Failed to process file. Try a CSV export from your bank.");
       setScreen("upload");
     }
-  }, [activeBusiness]);
+  }, [activeBusiness, businesses]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -109,10 +111,12 @@ const Upload = () => {
 
   // Don't render until auth AND business context resolve
   if (authLoading || bizLoading) return null;
-  if (!user || !activeBusiness) return null;
+  if (!user || businesses.length === 0) return null;
+  // Use activeBusiness or fall back to first business
+  const business = activeBusiness ?? businesses[0];
 
   return (
-    <AppShell businesses={businesses} activeBusiness={activeBusiness} onSelectBusiness={setActiveBusiness}>
+    <AppShell businesses={businesses} activeBusiness={business} onSelectBusiness={setActiveBusiness}>
       <div className="max-w-lg mx-auto">
 
         {/* ── UPLOAD SCREEN ── */}
@@ -123,12 +127,12 @@ const Upload = () => {
               <p className="text-sm text-muted-foreground mt-1">Import any financial file — Aje reads it, classifies everything, and gives you instant insights</p>
             </div>
 
-            {/* Drop zone */}
-            <div
+            {/* Drop zone — label wraps the input so clicking anywhere opens the picker */}
+            <label
+              htmlFor="file-upload"
               onDrop={handleDrop}
               onDragOver={e => e.preventDefault()}
-              onClick={() => { console.log("[Upload] Button clicked — opening file picker"); fileRef.current?.click(); }}
-              className="border-2 border-dashed border-primary/30 rounded-3xl p-10 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all active:scale-[0.98]"
+              className="border-2 border-dashed border-primary/30 rounded-3xl p-10 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all active:scale-[0.98] block"
             >
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <UploadIcon size={28} className="text-primary" />
@@ -136,9 +140,10 @@ const Upload = () => {
               <p className="text-base font-semibold mb-1">Tap to upload your file</p>
               <p className="text-sm text-muted-foreground">Bank statement, Excel (.xlsx), CSV, or .txt</p>
               <p className="text-xs text-muted-foreground mt-2">Or drag and drop here</p>
-            </div>
+            </label>
 
             <input
+              id="file-upload"
               ref={fileRef}
               type="file"
               accept=".csv,.xlsx,.xls,.txt"
@@ -209,7 +214,7 @@ const Upload = () => {
             <div className="mb-5">
               <div className="flex items-center justify-between mb-3">
                 <h1 className="text-xl font-bold">File Summary</h1>
-                <button onClick={() => { setScreen("upload"); setSaved(false); setTransactions([]); setSummary(null); }}
+                <button onClick={() => { setScreen("upload"); setAutoSaved(false); setAutoSaveError(""); setTransactions([]); setSummary(null); }}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
                   <RefreshCw size={13} /> New upload
                 </button>
@@ -302,9 +307,10 @@ const Upload = () => {
                     const toSave = transactions
                       .filter(t => t.type === "income" || t.type === "expense")
                       .map(t => ({ type: t.type as "income" | "expense", amount: t.amount, description: t.description, category: t.category }));
-                    if (activeBusiness) {
+                    const biz = activeBusiness ?? businesses[0];
+                    if (biz) {
                       setAutoSaveError("");
-                      addTransactionsBatch(activeBusiness.id, toSave)
+                      addTransactionsBatch(biz.id, toSave)
                         .then(() => setAutoSaved(true))
                         .catch(() => setAutoSaveError("Sync failed again. Check your connection."));
                     }

@@ -59,41 +59,92 @@ function applyRulesToTransactions(txs: ParsedTransaction[], rules: Rule[]): Pars
   });
 }
 
+// Format a list of transactions as a numbered result string
+function formatTxList(txs: ParsedTransaction[], label: string): string {
+  if (txs.length === 0) return `No transactions found${label ? ` ${label}` : ""}.`;
+  const lines = txs.slice(0, 20).map((t, i) =>
+    `${i + 1}. ${t.date} — ₦${t.amount.toLocaleString()} — ${t.description}`
+  );
+  const suffix = txs.length > 20 ? `\n…and ${txs.length - 20} more.` : "";
+  return `${txs.length} transaction${txs.length > 1 ? "s" : ""} ${label}:\n\n${lines.join("\n")}${suffix}`;
+}
+
 // Parse user intent locally — fast, no API needed for simple queries
 function parseIntent(msg: string, txs: ParsedTransaction[], summary: StatementSummary): string | PendingRule | null {
   const m = msg.toLowerCase().trim();
 
-  // ── QUERY: how much did I make / income ──
-  if (m.includes("how much") && (m.includes("make") || m.includes("earn") || m.includes("income") || m.includes("revenue"))) {
-    const week = m.includes("week");
-    const month = m.includes("month");
-    const income = txs.filter(t => t.type === "income");
-    if (week) {
-      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
-      const weekIncome = income.filter(t => new Date(t.date) >= cutoff).reduce((s, t) => s + t.amount, 0);
-      return `This week you made ₦${weekIncome.toLocaleString()} in income across ${income.filter(t => new Date(t.date) >= cutoff).length} transactions.`;
-    }
-    return `Total income: ₦${summary.totalIncome.toLocaleString()} from ${income.length} transactions.`;
+  // ── QUERY: amount filter — "above/over/greater than X" ──
+  const aboveMatch = m.match(/(?:above|over|greater than|more than)\s+₦?([\d,]+)/);
+  if (aboveMatch) {
+    const threshold = parseFloat(aboveMatch[1].replace(/,/g, ""));
+    const filtered = [...txs.filter(t => t.amount >= threshold)].sort((a, b) => b.amount - a.amount);
+    return formatTxList(filtered, `above ₦${threshold.toLocaleString()}`);
   }
 
-  // ── QUERY: expenses ──
-  if (m.includes("expense") || m.includes("spent") || m.includes("cost")) {
+  // ── QUERY: amount filter — "below/under/less than X" ──
+  const belowMatch = m.match(/(?:below|under|less than)\s+₦?([\d,]+)/);
+  if (belowMatch) {
+    const threshold = parseFloat(belowMatch[1].replace(/,/g, ""));
+    const filtered = [...txs.filter(t => t.amount <= threshold && t.amount > 0)].sort((a, b) => b.amount - a.amount);
+    return formatTxList(filtered, `below ₦${threshold.toLocaleString()}`);
+  }
+
+  // ── QUERY: show transactions by category/keyword ──
+  const showMatch = m.match(/(?:show|list|find|get)\s+(?:me\s+)?(?:all\s+)?(.+?)(?:\s+transactions?)?$/);
+  if (showMatch && !m.includes("how much") && !m.includes("total")) {
+    const keyword = showMatch[1].trim();
+    const typeMap: Record<string, ParsedTransaction["type"]> = { income: "income", expense: "expense", expenses: "expense", transfer: "transfer", transfers: "transfer" };
+    if (typeMap[keyword]) {
+      const filtered = txs.filter(t => t.type === typeMap[keyword]);
+      return formatTxList(filtered, `(${keyword})`);
+    }
+    // keyword search in description or category
+    const filtered = txs.filter(t =>
+      t.description.toLowerCase().includes(keyword) ||
+      t.category.toLowerCase().includes(keyword)
+    );
+    return formatTxList(filtered, `matching "${keyword}"`);
+  }
+
+  // ── QUERY: how much did I make / income ──
+  if (m.includes("how much") && (m.includes("make") || m.includes("earn") || m.includes("income") || m.includes("revenue"))) {
+    const income = txs.filter(t => t.type === "income");
+    if (m.includes("week")) {
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+      const filtered = income.filter(t => new Date(t.date) >= cutoff);
+      const total = filtered.reduce((s, t) => s + t.amount, 0);
+      return `Income this week: ₦${total.toLocaleString()} across ${filtered.length} transaction${filtered.length !== 1 ? "s" : ""}.`;
+    }
+    if (m.includes("month")) {
+      const now = new Date();
+      const filtered = income.filter(t => { const d = new Date(t.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
+      const total = filtered.reduce((s, t) => s + t.amount, 0);
+      return `Income this month: ₦${total.toLocaleString()} across ${filtered.length} transaction${filtered.length !== 1 ? "s" : ""}.`;
+    }
+    return `Total income: ₦${summary.totalIncome.toLocaleString()} from ${income.length} transaction${income.length !== 1 ? "s" : ""}.`;
+  }
+
+  // ── QUERY: expenses / costs ──
+  if ((m.includes("how much") && (m.includes("spent") || m.includes("spend") || m.includes("expense") || m.includes("cost"))) ||
+      m === "show me my expenses" || m === "my expenses") {
     const expenses = txs.filter(t => t.type === "expense");
-    const top = [...expenses].sort((a, b) => b.amount - a.amount).slice(0, 3);
-    const topText = top.map(t => `• ${t.description} — ₦${t.amount.toLocaleString()}`).join("\n");
-    return `Total expenses: ₦${summary.totalExpenses.toLocaleString()} across ${expenses.length} transactions.\n\nBiggest costs:\n${topText}`;
+    const top = [...expenses].sort((a, b) => b.amount - a.amount).slice(0, 5);
+    const topText = top.map((t, i) => `${i + 1}. ${t.date} — ₦${t.amount.toLocaleString()} — ${t.description}`).join("\n");
+    return `Total expenses: ₦${summary.totalExpenses.toLocaleString()} across ${expenses.length} transaction${expenses.length !== 1 ? "s" : ""}.\n\nTop 5 by amount:\n${topText}`;
   }
 
   // ── QUERY: biggest / largest ──
   if (m.includes("biggest") || m.includes("largest") || m.includes("highest")) {
-    const sorted = [...txs].sort((a, b) => b.amount - a.amount).slice(0, 5);
-    const lines = sorted.map(t => `• ₦${t.amount.toLocaleString()} — ${t.description} (${t.type})`).join("\n");
-    return `Your 5 largest transactions:\n${lines}`;
+    const n = m.match(/top\s+(\d+)/)?.[1] ? parseInt(m.match(/top\s+(\d+)/)![1]) : 5;
+    const sorted = [...txs].sort((a, b) => b.amount - a.amount).slice(0, n);
+    const lines = sorted.map((t, i) => `${i + 1}. ${t.date} — ₦${t.amount.toLocaleString()} — ${t.description} (${t.type})`).join("\n");
+    return `Top ${sorted.length} largest transactions:\n\n${lines}`;
   }
 
-  // ── QUERY: summary / overview ──
-  if (m.includes("summary") || m.includes("overview") || m.includes("total")) {
-    return `Here's your summary:\n• Income: ₦${summary.totalIncome.toLocaleString()}\n• Expenses: ₦${summary.totalExpenses.toLocaleString()}\n• Net: ₦${summary.netBalance >= 0 ? "+" : ""}${summary.netBalance.toLocaleString()}\n• Transactions: ${summary.transactionCount}`;
+  // ── QUERY: summary / overview / total ──
+  if (m === "summary" || m === "overview" || m.includes("give me a summary") || m.includes("show summary") ||
+      (m.includes("total") && !m.includes("above") && !m.includes("below"))) {
+    return `Summary:\n• Income: ₦${summary.totalIncome.toLocaleString()}\n• Expenses: ₦${summary.totalExpenses.toLocaleString()}\n• Net: ₦${summary.netBalance >= 0 ? "+" : ""}${summary.netBalance.toLocaleString()}\n• Transactions: ${summary.transactionCount}`;
   }
 
   // ── RULE: mark X as expense/income ──
@@ -104,10 +155,10 @@ function parseIntent(msg: string, txs: ParsedTransaction[], summary: StatementSu
     const type = rawType.includes("expense") ? "expense"
       : rawType.includes("income") || rawType.includes("revenue") || rawType.includes("salary") || rawType.includes("cap sales") ? "income"
       : "transfer";
-    const affected = txs.filter(t => t.description.toLowerCase().includes(pattern) || (pattern.includes("₦") && t.amount === parseFloat(pattern.replace(/[₦,]/g, ""))));
-    if (affected.length === 0) return `I couldn't find any transactions matching "${pattern}". Try a keyword from the description.`;
+    const affected = txs.filter(t => t.description.toLowerCase().includes(pattern));
+    if (affected.length === 0) return `No transactions found matching "${pattern}".`;
     const rule: Rule = { id: Date.now().toString(), description: `Mark "${pattern}" as ${type}`, pattern, action: "set_type", value: type, createdAt: Date.now() };
-    return { rule, affectedIds: affected.map(t => t.id), confirmMessage: `Apply this rule to ${affected.length} transaction${affected.length > 1 ? "s" : ""}? I'll mark all "${pattern}" entries as ${type}.` } as PendingRule;
+    return { rule, affectedIds: affected.map(t => t.id), confirmMessage: `Apply to ${affected.length} transaction${affected.length > 1 ? "s" : ""}? All "${pattern}" entries will be marked as ${type}.` } as PendingRule;
   }
 
   // ── RULE: ignore transfers ──
@@ -115,19 +166,19 @@ function parseIntent(msg: string, txs: ParsedTransaction[], summary: StatementSu
     const affected = txs.filter(t => t.type === "transfer");
     if (affected.length === 0) return "No transfers found in your data.";
     const rule: Rule = { id: Date.now().toString(), description: "Ignore all transfers", pattern: "transfer", action: "ignore", value: "unknown", createdAt: Date.now() };
-    return { rule, affectedIds: affected.map(t => t.id), confirmMessage: `Ignore ${affected.length} transfer transaction${affected.length > 1 ? "s" : ""}? They'll be excluded from totals.` } as PendingRule;
+    return { rule, affectedIds: affected.map(t => t.id), confirmMessage: `Ignore ${affected.length} transfer${affected.length > 1 ? "s" : ""}? They'll be excluded from totals.` } as PendingRule;
   }
 
   // ── RULE: amount-based ──
-  const amountMatch = m.match(/every\s+₦?([\d,]+)\s+(?:transaction|entry|payment)\s+is\s+(.+)/);
-  if (amountMatch) {
-    const amount = parseFloat(amountMatch[1].replace(/,/g, ""));
-    const label = amountMatch[2].trim();
+  const amountRuleMatch = m.match(/every\s+₦?([\d,]+)\s+(?:transaction|entry|payment)\s+is\s+(.+)/);
+  if (amountRuleMatch) {
+    const amount = parseFloat(amountRuleMatch[1].replace(/,/g, ""));
+    const label = amountRuleMatch[2].trim();
     const type = label.includes("expense") ? "expense" : "income";
     const affected = txs.filter(t => t.amount === amount);
     if (affected.length === 0) return `No transactions found for ₦${amount.toLocaleString()}.`;
     const rule: Rule = { id: Date.now().toString(), description: `₦${amount.toLocaleString()} = ${label}`, pattern: amount.toString(), action: "set_type", value: type, createdAt: Date.now() };
-    return { rule, affectedIds: affected.map(t => t.id), confirmMessage: `Apply this to ${affected.length} transaction${affected.length > 1 ? "s" : ""}? All ₦${amount.toLocaleString()} entries will be marked as ${type}.` } as PendingRule;
+    return { rule, affectedIds: affected.map(t => t.id), confirmMessage: `Apply to ${affected.length} transaction${affected.length > 1 ? "s" : ""}? All ₦${amount.toLocaleString()} entries will be marked as ${type}.` } as PendingRule;
   }
 
   return null; // fall through to AI
@@ -164,11 +215,20 @@ export const DataChat = ({ transactions, summary, onUpdateTransactions }: DataCh
       const intent = parseIntent(text, transactions, summary);
 
       if (intent === null) {
-        // Fall back to AI for complex queries
+        // Fall back to AI — send real transaction rows so it can answer precisely
         const { aiRequest } = await import("@/lib/aiClient");
-        const txSummary = `Income: ₦${summary.totalIncome.toLocaleString()}, Expenses: ₦${summary.totalExpenses.toLocaleString()}, Net: ₦${summary.netBalance.toLocaleString()}, ${summary.transactionCount} transactions.`;
+        const txLines = transactions.slice(0, 100).map(t =>
+          `${t.date} | ₦${t.amount.toLocaleString()} | ${t.type} | ${t.category} | ${t.description}`
+        ).join("\n");
+        const systemContext = `You are a financial data query tool. You have access to the user's real transaction data below. Answer ONLY based on this data. Be direct and precise. When listing transactions always include: date, amount, description. If nothing matches say "No transactions found." Never guess or say "it seems like".
+
+TRANSACTION DATA (${transactions.length} rows):
+${txLines}
+
+SUMMARY: Income ₦${summary.totalIncome.toLocaleString()} | Expenses ₦${summary.totalExpenses.toLocaleString()} | Net ₦${summary.netBalance.toLocaleString()} | ${summary.transactionCount} transactions`;
+
         const reply = await aiRequest({
-          message: `User is asking about their uploaded financial data. Data: ${txSummary}\n\nUser: ${text}`,
+          message: `${systemContext}\n\nUSER QUERY: ${text}`,
           businessType: "general",
         });
         addMessage({ role: "assistant", text: reply });

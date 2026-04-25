@@ -213,7 +213,7 @@ export async function addTransactionsBatch(
   }
 }
 
-
+export async function addTransaction(
   businessId: string, type: "income" | "expense",
   amount: number, description: string, category: string
 ): Promise<Transaction> {
