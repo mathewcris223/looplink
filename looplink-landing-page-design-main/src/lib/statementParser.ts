@@ -28,6 +28,32 @@ export interface StatementSummary {
   patterns: string[];
 }
 
+// User-confirmed column mapping — set to "income", "expense", "date", "description", or "skip"
+export type ColRole = "income" | "expense" | "date" | "description" | "skip";
+export interface UserColumnMapping { [colIndex: number]: ColRole }
+
+// Read just the headers + first 3 data rows for preview
+export async function previewFile(file: File): Promise<{ headers: string[]; previewRows: string[][] }> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as string[][];
+  const nonEmpty = rows.filter(r => r.some(c => String(c).trim()));
+  // Find header row
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(10, nonEmpty.length); i++) {
+    const joined = nonEmpty[i].join(" ").toLowerCase();
+    if (joined.includes("date") || joined.includes("amount") || joined.includes("revenue") ||
+        joined.includes("description") || joined.includes("narration") || joined.includes("credit") || joined.includes("debit")) {
+      headerIdx = i; break;
+    }
+  }
+  return {
+    headers: nonEmpty[headerIdx]?.map(String) ?? [],
+    previewRows: nonEmpty.slice(headerIdx + 1, headerIdx + 4).map(r => r.map(String)),
+  };
+}
+
 // ── File → rows[][] using SheetJS — accepts pre-read buffer ──────────────────
 async function fileToRows(buffer: ArrayBuffer): Promise<string[][]> {
   const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
@@ -69,12 +95,46 @@ function detectColumns(headers: string[]): {
   return {
     id: find("transaction_id", "txn_id", "trans_id", "id", "ref"),
     date: find("date", "time", "value date", "trans date", "transaction date"),
-    description: find("description", "narration", "details", "particulars", "remarks", "memo", "reference", "narrative", "product", "item", "goods", "service"),
-    amount: find("amount", "transaction amount", "trans amount", "value", "sale amount", "price", "revenue", "total"),
+    description: find("description", "narration", "details", "particulars", "remarks", "memo", "reference", "narrative", "product", "item", "goods", "service", "jersey", "match", "name", "type"),
+    amount: find("amount", "transaction amount", "trans amount", "value", "sale amount"),
     credit: find("credit", "cr", "money in", "deposit", "inflow"),
     debit: find("debit", "dr", "money out", "withdrawal", "outflow"),
     balance: find("balance", "running balance", "available balance"),
   };
+}
+
+// ── Detect extra financial columns (revenue, cost, profit, etc.) ──────────────
+interface FinancialCol { index: number; name: string; type: "income" | "expense" }
+
+function detectFinancialCols(headers: string[]): FinancialCol[] {
+  const h = headers.map(h => String(h).toLowerCase().trim());
+  const result: FinancialCol[] = [];
+
+  h.forEach((col, i) => {
+    // Skip unit-rate columns — these are per-unit prices, not totals
+    if (col.includes("per unit") || col.includes("unit price") || col.includes("unit cost") ||
+        col.includes("price per") || col.includes("cost per") || col.includes("rate")) return;
+
+    // Skip profit/net/margin — these are derived (revenue - cost), adding them causes double-counting
+    if (col.includes("profit") || col.includes("net") || col.includes("margin") || col.includes("gain")) return;
+
+    // Skip quantity/units sold columns
+    if (col.includes("unit") || col.includes("qty") || col.includes("quantity") || col.includes("sold")) return;
+
+    // Income columns
+    if (col.includes("revenue") || col.includes("sales") || col.includes("income") ||
+        col.includes("inflow") || col.includes("selling price") || col.includes("turnover")) {
+      result.push({ index: i, name: headers[i], type: "income" });
+    }
+    // Expense columns — only totals
+    else if (col.includes("total cost") || col.includes("total expense") || col.includes("other expense") ||
+             col.includes("expenditure") || col.includes("outflow") || col.includes("loss") ||
+             col.includes("overhead") || col.includes("operating cost")) {
+      result.push({ index: i, name: headers[i], type: "expense" });
+    }
+  });
+
+  return result;
 }
 
 // ── Rule-based classifier ─────────────────────────────────────────────────────
@@ -113,7 +173,7 @@ async function hashFile(buffer: ArrayBuffer): Promise<string> {
 }
 
 // ── Result cache (localStorage) ──────────────────────────────────────────────
-const CACHE_PREFIX = "aje_stmt_v2_";  // bump version to invalidate old caches
+const CACHE_PREFIX = "aje_stmt_v4_";
 
 function loadCache(hash: string): { transactions: ParsedTransaction[]; summary: StatementSummary } | null {
   try {
@@ -165,7 +225,8 @@ function detectPatterns(txs: ParsedTransaction[]): string[] {
 // ── Main parse function ───────────────────────────────────────────────────────
 export async function parseStatement(
   file: File,
-  onProgress: (msg: string) => void
+  onProgress: (msg: string) => void,
+  userMapping?: UserColumnMapping
 ): Promise<{ transactions: ParsedTransaction[]; summary: StatementSummary; fileHash: string }> {
 
   onProgress("Reading file…");
@@ -202,29 +263,65 @@ export async function parseStatement(
 
   const headers = rows[headerIdx].map(h => String(h));
   const cols = detectColumns(headers);
+  // Use user-confirmed mapping if provided, otherwise auto-detect financial cols
+  const financialCols: FinancialCol[] = userMapping
+    ? Object.entries(userMapping)
+        .filter(([, role]) => role === "income" || role === "expense")
+        .map(([idx, role]) => ({ index: Number(idx), name: headers[Number(idx)] ?? `Col ${idx}`, type: role as "income" | "expense" }))
+    : detectFinancialCols(headers);
+
+  // Override date/description from userMapping if provided
+  if (userMapping) {
+    for (const [idx, role] of Object.entries(userMapping)) {
+      if (role === "date") cols.date = Number(idx);
+      if (role === "description") cols.description = Number(idx);
+    }
+  }
+
   const dataRows = rows.slice(headerIdx + 1).filter(r => r.some(c => String(c).trim()));
 
   onProgress(`Found ${dataRows.length} rows. Extracting transactions…`);
 
   // ── Pure deterministic extraction — no AI, same input = same output ──
-  const rawTxs: ParsedTransaction[] = dataRows.map((row, i) => {
-    // Use explicit id column if present, otherwise row index
+  const rawTxs: ParsedTransaction[] = [];
+
+  dataRows.forEach((row, i) => {
     const rowId = cols.id >= 0 && String(row[cols.id] ?? "").trim()
       ? String(row[cols.id]).trim()
       : `tx_${i}`;
 
-    // Build description — prefer dedicated desc column, fall back to joining all non-numeric non-date cols
     let desc = "";
     if (cols.description >= 0) {
       desc = String(row[cols.description] ?? "").trim();
     } else {
-      // Fallback: join all string-looking columns (skip id, date, amount, credit, debit, balance)
       const skipCols = new Set([cols.id, cols.date, cols.amount, cols.credit, cols.debit, cols.balance].filter(c => c >= 0));
-      desc = row.filter((_, idx) => !skipCols.has(idx)).map(String).filter(v => v.trim() && isNaN(Number(v))).join(" ").trim();
+      desc = row.filter((_, idx) => !skipCols.has(idx)).map(String).filter(v => v.trim() && isNaN(Number(v.replace(/[₦,]/g, "")))).join(" ").trim();
     }
 
     const dateStr = cols.date >= 0 ? String(row[cols.date] ?? "") : "";
 
+    // ── Multi-column mode: file has named financial columns (revenue, cost, profit…) ──
+    if (financialCols.length >= 2) {
+      financialCols.forEach((fc, j) => {
+        const amount = extractAmount(String(row[fc.index] ?? ""));
+        if (amount <= 0) return;
+        const colLabel = fc.name.trim();
+        const txDesc = desc ? `${desc} — ${colLabel}` : colLabel;
+        rawTxs.push({
+          id: `${rowId}_${j}`,
+          date: normalizeDate(dateStr),
+          description: txDesc || "Unknown",
+          amount,
+          type: fc.type,
+          category: fc.type === "income" ? "Revenue" : "Expense",
+          isUnusual: amount > 500000,
+          rawLine: row.map(String).join(",") + `_${j}`,
+        });
+      });
+      return;
+    }
+
+    // ── Single-column mode: standard bank statement ──
     let amount = 0;
     let isCredit: boolean | null = null;
 
@@ -239,9 +336,9 @@ export async function parseStatement(
       isCredit = !raw.includes("-") && !raw.includes("(");
     }
 
+    if (amount <= 0) return;
     const local = classifyLocally(desc, amount, isCredit);
-
-    return {
+    rawTxs.push({
       id: rowId,
       date: normalizeDate(dateStr),
       description: desc || "Unknown",
@@ -250,8 +347,8 @@ export async function parseStatement(
       category: local.category,
       isUnusual: local.isUnusual,
       rawLine: row.map(String).join(","),
-    };
-  }).filter(t => t.amount > 0);
+    });
+  });
 
   if (rawTxs.length === 0) {
     throw new Error(

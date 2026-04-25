@@ -245,10 +245,12 @@ export async function addTransaction(
   return data as Transaction;
 }
 
-export async function getTransactions(businessId: string, limit = 50): Promise<Transaction[]> {
-  const { data, error } = await supabase
+export async function getTransactions(businessId: string, limit?: number): Promise<Transaction[]> {
+  let query = supabase
     .from("transactions").select("*").eq("business_id", businessId)
-    .order("created_at", { ascending: false }).limit(limit);
+    .order("created_at", { ascending: false });
+  if (limit) query = query.limit(limit);
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as Transaction[];
 }

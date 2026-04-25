@@ -65,7 +65,7 @@ const Today = () => {
     setTxLoading(true);
     try {
       const [txData, salesData] = await Promise.all([
-        getTransactions(activeBusiness.id, 200),
+        getTransactions(activeBusiness.id),
         getInventorySales(activeBusiness.id),
       ]);
       setTransactions(txData);

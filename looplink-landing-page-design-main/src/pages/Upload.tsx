@@ -13,10 +13,10 @@ import {
   Upload as UploadIcon, CheckCircle, AlertTriangle,
   ArrowUpRight, ArrowDownRight, Loader2, RefreshCw, Search
 } from "lucide-react";
-import type { ParsedTransaction, StatementSummary } from "@/lib/statementParser";
+import type { ParsedTransaction, StatementSummary, UserColumnMapping, ColRole } from "@/lib/statementParser";
 import { DataChat } from "@/components/upload/DataChat";
 
-type Screen = "upload" | "processing" | "results";
+type Screen = "upload" | "mapping" | "processing" | "results";
 
 const Upload = () => {
   const { user, loading: authLoading } = useAuth();
@@ -34,6 +34,10 @@ const Upload = () => {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [autoSaveError, setAutoSaveError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [fileHeaders, setFileHeaders] = useState<string[]>([]);
+  const [previewRows, setPreviewRows] = useState<string[][]>([]);
+  const [columnMapping, setColumnMapping] = useState<UserColumnMapping>({});
 
   // Safe redirect — wait for both auth AND business context to resolve
   useEffect(() => {
@@ -45,32 +49,54 @@ const Upload = () => {
 
   const handleFile = useCallback(async (file: File) => {
     if (!file) return;
-    console.log("[Upload] File selected:", file.name);
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!["csv", "xlsx", "xls", "txt"].includes(ext ?? "")) {
       setError("Unsupported file type. Please upload a CSV, Excel (.xlsx/.xls), or .txt file.");
       return;
     }
+    setError("");
+    // Preview headers first — show mapping screen
+    try {
+      const { previewFile } = await import("@/lib/statementParser");
+      const { headers, previewRows: pRows } = await previewFile(file);
+      setFileHeaders(headers);
+      setPreviewRows(pRows);
+      setPendingFile(file);
+      // Auto-suggest mapping
+      const autoMap: UserColumnMapping = {};
+      headers.forEach((h, i) => {
+        const col = h.toLowerCase().trim();
+        if (col.includes("date") || col.includes("time")) autoMap[i] = "date";
+        else if (col.includes("description") || col.includes("narration") || col.includes("details") ||
+                 col.includes("product") || col.includes("item") || col.includes("jersey") || col.includes("match") || col.includes("type")) autoMap[i] = "description";
+        else if (col.includes("revenue") || col.includes("income") || col.includes("sales") || col.includes("inflow") || col.includes("credit")) autoMap[i] = "income";
+        else if (col.includes("total cost") || col.includes("other expense") || col.includes("expenditure") || col.includes("outflow") || col.includes("debit")) autoMap[i] = "expense";
+        else autoMap[i] = "skip";
+      });
+      setColumnMapping(autoMap);
+      setScreen("mapping");
+    } catch {
+      setError("Could not read file headers. Try a CSV export.");
+    }
+  }, []);
 
+  const processFile = useCallback(async () => {
+    if (!pendingFile) return;
     setScreen("processing");
     setError("");
     setAutoSaveError("");
     setProgressStep(0);
-
-    const steps = ["Reading file…", "Detecting format…", "Extracting transactions…", "Classifying with AI…", "Cleaning data…", "Done!"];
     let stepIdx = 0;
-
     try {
       const { parseStatement } = await import("@/lib/statementParser");
-      const { transactions: txs, summary: sum } = await parseStatement(file, (msg) => {
+      const { transactions: txs, summary: sum } = await parseStatement(pendingFile, (msg) => {
         setProgress(msg);
-        stepIdx = Math.min(stepIdx + 1, steps.length - 1);
+        stepIdx = Math.min(stepIdx + 1, 5);
         setProgressStep(stepIdx);
-      });
-
+      }, columnMapping);
       setTransactions(txs);
       setSummary(sum);
-      setSelectedIds(null); // reset selection for new file
+      setSelectedIds(null);
       setSaveStatus("idle");
       setAutoSaveError("");
       setScreen("results");
@@ -78,7 +104,7 @@ const Upload = () => {
       setError(e instanceof Error ? e.message : "Failed to process file. Try a CSV export from your bank.");
       setScreen("upload");
     }
-  }, [activeBusiness, businesses]);
+  }, [pendingFile, columnMapping]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -157,6 +183,82 @@ const Upload = () => {
           </>
         )}
 
+        {/* ── MAPPING SCREEN ── */}
+        {screen === "mapping" && (
+          <>
+            <div className="mb-5">
+              <button onClick={() => setScreen("upload")} className="text-xs text-muted-foreground mb-3 flex items-center gap-1">
+                ← Back
+              </button>
+              <h1 className="text-xl font-bold">Confirm columns</h1>
+              <p className="text-sm text-muted-foreground mt-1">Tell Aje what each column means so the numbers are accurate.</p>
+            </div>
+
+            {/* Preview table */}
+            {previewRows.length > 0 && (
+              <div className="overflow-x-auto mb-4 rounded-xl border">
+                <table className="text-[10px] w-full">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      {fileHeaders.map((h, i) => (
+                        <th key={i} className="px-2 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((row, ri) => (
+                      <tr key={ri} className="border-t">
+                        {fileHeaders.map((_, ci) => (
+                          <td key={ci} className="px-2 py-1 text-muted-foreground whitespace-nowrap">{row[ci] ?? ""}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Column role selectors */}
+            <div className="space-y-2 mb-6">
+              {fileHeaders.map((header, i) => {
+                const role = columnMapping[i] ?? "skip";
+                const roleColors: Record<ColRole, string> = {
+                  income: "bg-emerald-100 text-emerald-800 border-emerald-300",
+                  expense: "bg-red-100 text-red-800 border-red-300",
+                  date: "bg-blue-100 text-blue-800 border-blue-300",
+                  description: "bg-violet-100 text-violet-800 border-violet-300",
+                  skip: "bg-muted/40 text-muted-foreground border-border",
+                };
+                return (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-xs font-medium w-36 truncate shrink-0">{header}</span>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {(["income", "expense", "date", "description", "skip"] as ColRole[]).map(r => (
+                        <button
+                          key={r}
+                          onClick={() => setColumnMapping(prev => ({ ...prev, [i]: r }))}
+                          className={`text-[11px] px-2.5 py-1 rounded-full border font-medium transition-all ${
+                            role === r ? roleColors[r] : "bg-muted/20 text-muted-foreground border-border"
+                          }`}
+                        >
+                          {r === "skip" ? "Skip" : r === "income" ? "Income ↑" : r === "expense" ? "Expense ↓" : r === "date" ? "Date" : "Description"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={processFile}
+              disabled={!Object.values(columnMapping).some(r => r === "income" || r === "expense")}
+              className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition-all">
+              Process file
+            </button>
+          </>
+        )}
+
         {/* ── PROCESSING SCREEN ── */}
         {screen === "processing" && (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -193,7 +295,7 @@ const Upload = () => {
             <div className="mb-5">
               <div className="flex items-center justify-between mb-3">
                 <h1 className="text-xl font-bold">File Summary</h1>
-                <button onClick={() => { setScreen("upload"); setTransactions([]); setSummary(null); setSelectedIds(null); setSaveStatus("idle"); }}
+                <button onClick={() => { setScreen("upload"); setTransactions([]); setSummary(null); setSelectedIds(null); setSaveStatus("idle"); setPendingFile(null); setFileHeaders([]); setPreviewRows([]); setColumnMapping({}); }}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
                   <RefreshCw size={13} /> New upload
                 </button>

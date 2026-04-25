@@ -23,7 +23,7 @@ const History = () => {
   const load = useCallback(async () => {
     if (!activeBusiness) return;
     setLoading(true);
-    try { setTransactions(await getTransactions(activeBusiness.id, 200)); }
+    try { setTransactions(await getTransactions(activeBusiness.id)); }
     catch {} finally { setLoading(false); }
   }, [activeBusiness]);
 

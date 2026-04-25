@@ -25,7 +25,7 @@ const Analytics = () => {
 
   const load = useCallback(async () => {
     if (!activeBusiness) return;
-    try { setTransactions(await getTransactions(activeBusiness.id, 200)); } catch {}
+    try { setTransactions(await getTransactions(activeBusiness.id)); } catch {}
   }, [activeBusiness]);
 
   useEffect(() => { load(); }, [load]);

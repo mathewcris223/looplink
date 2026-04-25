@@ -44,7 +44,7 @@ const Dashboard = () => {
     setTxLoading(true);
     try {
       const [data, sales] = await Promise.all([
-        getTransactions(activeBusiness.id, 100),
+        getTransactions(activeBusiness.id),
         getInventorySales(activeBusiness.id),
       ]);
       setTransactions(data);
