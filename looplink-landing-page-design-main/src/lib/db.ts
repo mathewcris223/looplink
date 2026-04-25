@@ -196,7 +196,24 @@ export async function getBusinesses(): Promise<Business[]> {
 
 // ── Transactions ─────────────────────────────────────────────────────────────
 
-export async function addTransaction(
+export async function addTransactionsBatch(
+  businessId: string,
+  transactions: Array<{ type: "income" | "expense"; amount: number; description: string; category: string }>
+): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  const rows = transactions.map(t => ({
+    business_id: businessId, user_id: user.id,
+    type: t.type, amount: t.amount, description: t.description, category: t.category,
+  }));
+  // Insert in chunks of 100 to avoid payload limits
+  for (let i = 0; i < rows.length; i += 100) {
+    const { error } = await supabase.from("transactions").insert(rows.slice(i, i + 100));
+    if (error) throw error;
+  }
+}
+
+
   businessId: string, type: "income" | "expense",
   amount: number, description: string, category: string
 ): Promise<Transaction> {

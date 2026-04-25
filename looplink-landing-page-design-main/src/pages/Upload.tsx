@@ -8,10 +8,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useBusiness } from "@/context/BusinessContext";
 import AppShell from "@/components/dashboard/AppShell";
-import { addTransaction } from "@/lib/db";
+import { addTransactionsBatch } from "@/lib/db";
 import {
-  Upload as UploadIcon, FileText, CheckCircle, AlertTriangle, ChevronDown, ChevronUp,
-  ArrowUpRight, ArrowDownRight, Loader2, RefreshCw, Save
+  Upload as UploadIcon, CheckCircle, AlertTriangle, ChevronDown, ChevronUp,
+  ArrowUpRight, ArrowDownRight, Loader2, RefreshCw, MessageSquare
 } from "lucide-react";
 import type { ParsedTransaction, StatementSummary } from "@/lib/statementParser";
 import { DataChat } from "@/components/upload/DataChat";
@@ -31,9 +31,8 @@ const Upload = () => {
   const [summary, setSummary] = useState<StatementSummary | null>(null);
   const [error, setError] = useState("");
   const [showDrillDown, setShowDrillDown] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set(["income", "expense"]));
+  const [autoSaved, setAutoSaved] = useState(false);
+  const [autoSaveError, setAutoSaveError] = useState("");
 
   // Safe redirect — wait for both auth AND business context to resolve
   useEffect(() => {
@@ -53,13 +52,14 @@ const Upload = () => {
 
     setScreen("processing");
     setError("");
+    setAutoSaved(false);
+    setAutoSaveError("");
     setProgressStep(0);
 
     const steps = ["Reading file…", "Detecting format…", "Extracting transactions…", "Classifying with AI…", "Cleaning data…", "Done!"];
     let stepIdx = 0;
 
     try {
-      // Lazy-load parser only after file is selected — never on click
       const { parseStatement } = await import("@/lib/statementParser");
       const { transactions: txs, summary: sum } = await parseStatement(file, (msg) => {
         setProgress(msg);
@@ -69,36 +69,40 @@ const Upload = () => {
 
       setTransactions(txs);
       setSummary(sum);
+
+      // ── AUTO-SAVE to DB so AI chat can read it ──────────────────────────
+      if (activeBusiness) {
+        setProgress("Saving to your account…");
+        try {
+          const toSave = txs
+            .filter(t => t.type === "income" || t.type === "expense")
+            .map(t => ({
+              type: t.type as "income" | "expense",
+              amount: t.amount,
+              description: t.description,
+              category: t.category,
+            }));
+          console.log("[Upload] Auto-saving", toSave.length, "transactions to DB…");
+          await addTransactionsBatch(activeBusiness.id, toSave);
+          console.log("[Upload] Auto-save success");
+          setAutoSaved(true);
+        } catch (saveErr) {
+          console.error("[Upload] Auto-save failed:", saveErr);
+          setAutoSaveError("Saved locally but couldn't sync to account. Try again.");
+        }
+      }
+
       setScreen("results");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to process file. Try a CSV export from your bank.");
       setScreen("upload");
     }
-  }, []);
+  }, [activeBusiness]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
-  };
-
-  const handleSaveToApp = async () => {
-    if (!activeBusiness || saving) return;
-    setSaving(true);
-    const toSave = transactions.filter(t => selectedTypes.has(t.type) && t.type !== "transfer" && t.type !== "unknown");
-    try {
-      for (const tx of toSave) {
-        await addTransaction(
-          activeBusiness.id,
-          tx.type as "income" | "expense",
-          tx.amount,
-          tx.description,
-          tx.category
-        );
-      }
-      setSaved(true);
-    } catch { /* silent */ }
-    finally { setSaving(false); }
   };
 
   const STEPS = ["Read", "Detect", "Extract", "Classify", "Clean", "Done"];
@@ -271,41 +275,45 @@ const Upload = () => {
               onUpdateTransactions={setTransactions}
             />
 
-            {/* Save to app */}
-            {!saved ? (
-              <div className="bg-card border rounded-2xl px-4 py-4 mb-5">
-                <p className="text-sm font-semibold mb-3">Save to Aje</p>
-                <div className="flex gap-2 mb-3">
-                  {(["income", "expense"] as const).map(t => (
-                    <button key={t} onClick={() => setSelectedTypes(prev => {
-                      const next = new Set(prev);
-                      next.has(t) ? next.delete(t) : next.add(t);
-                      return next;
-                    })}
-                      className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${
-                        selectedTypes.has(t) ? (t === "income" ? "bg-emerald-500 text-white border-emerald-500" : "bg-red-500 text-white border-red-500") : "bg-muted/40 text-muted-foreground"
-                      }`}>
-                      {t === "income" ? "✓ Income" : "✓ Expenses"}
-                    </button>
-                  ))}
+            {/* Auto-save status + Chat CTA */}
+            {autoSaved ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-4 mb-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <CheckCircle size={20} className="text-emerald-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-emerald-700">File ready. Ask anything.</p>
+                    <p className="text-xs text-emerald-600">{transactions.filter(t => t.type === "income" || t.type === "expense").length} transactions saved to your account</p>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  {transactions.filter(t => selectedTypes.has(t.type)).length} transactions will be saved
-                </p>
-                <button onClick={handleSaveToApp} disabled={saving}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-50">
-                  {saving ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : <><Save size={16} /> Save to Aje</>}
+                <button
+                  onClick={() => navigate("/chat")}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold active:scale-[0.98] transition-all">
+                  <MessageSquare size={16} /> Chat with AI about this file
                 </button>
               </div>
-            ) : (
-              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-4 mb-5">
-                <CheckCircle size={20} className="text-emerald-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-bold text-emerald-700">Saved to Aje ✓</p>
-                  <p className="text-xs text-emerald-600">Transactions added to your account</p>
+            ) : autoSaveError ? (
+              <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-4 mb-5">
+                <div className="flex items-start gap-2 mb-3">
+                  <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700">{autoSaveError}</p>
                 </div>
+                <button
+                  onClick={() => {
+                    const toSave = transactions
+                      .filter(t => t.type === "income" || t.type === "expense")
+                      .map(t => ({ type: t.type as "income" | "expense", amount: t.amount, description: t.description, category: t.category }));
+                    if (activeBusiness) {
+                      setAutoSaveError("");
+                      addTransactionsBatch(activeBusiness.id, toSave)
+                        .then(() => setAutoSaved(true))
+                        .catch(() => setAutoSaveError("Sync failed again. Check your connection."));
+                    }
+                  }}
+                  className="w-full py-3 rounded-xl bg-red-500 text-white text-sm font-bold">
+                  Retry sync
+                </button>
               </div>
-            )}
+            ) : null}
 
             {/* Drill-down — transactions list */}
             <button onClick={() => setShowDrillDown(d => !d)}
